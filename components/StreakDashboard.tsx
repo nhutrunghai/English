@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StreakDayNote, StreakTask, StreakTaskStatus } from '../services/streakTypes';
-import { deleteStreakTask, fetchStreakDayNotes, fetchStreakTasks, saveStreakDayNote, saveStreakTask } from '../services/supabaseService';
+import { deleteStreakDay, deleteStreakTask, fetchStreakDayNotes, fetchStreakTasks, saveStreakDayNote, saveStreakTask } from '../services/supabaseService';
 
 interface StreakDashboardProps {
   activeTaskId: string | null;
@@ -14,6 +14,7 @@ const text = {
   title: 'K\u1ebf ho\u1ea1ch h\u1ecdc t\u1eadp & Streak',
   desc: 'Qu\u1ea3n l\u00fd l\u1ecbch h\u1ecdc theo ng\u00e0y. Khi b\u1eaft \u0111\u1ea7u H\u1ecdc Pomo, task ch\u1ec9 chuy\u1ec3n sang ho\u00e0n th\u00e0nh sau khi Pomodoro k\u1ebft th\u00fac.',
   addDay: 'Th\u00eam h\u00e0ng h\u00f4m nay',
+  deleteDay: 'X\u00f3a c\u1ea3 k\u1ebf ho\u1ea1ch ng\u00e0y',
   addRow: '+ H\u00e0ng',
   loadFail: 'Kh\u00f4ng t\u1ea3i \u0111\u01b0\u1ee3c danh s\u00e1ch k\u1ebf ho\u1ea1ch.',
   saveFail: 'L\u01b0u thay \u0111\u1ed5i th\u1ea5t b\u1ea1i.',
@@ -21,6 +22,8 @@ const text = {
   addFail: 'Th\u00eam h\u00e0ng m\u1edbi th\u1ea5t b\u1ea1i.',
   deleteAsk: 'X\u00f3a h\u00e0ng k\u1ebf ho\u1ea1ch n\u00e0y?',
   deleteFail: 'X\u00f3a h\u00e0ng th\u1ea5t b\u1ea1i.',
+  deleteDayAsk: 'X\u00f3a to\u00e0n b\u1ed9 k\u1ebf ho\u1ea1ch c\u1ee7a ng\u00e0y n\u00e0y?',
+  deleteDayFail: 'X\u00f3a k\u1ebf ho\u1ea1ch ng\u00e0y th\u1ea5t b\u1ea1i.',
   newSubject: 'Ch\u1ee7 \u0111\u1ec1 m\u1edbi',
   dayNote: 'Ghi ch\u00fa theo ng\u00e0y',
   target: 'M\u1ee5c ti\u00eau/t\u1ed5ng gi\u1edd',
@@ -63,6 +66,13 @@ const toIsoDate = (value: string) => {
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
   return trimmed;
+};
+
+const getLocalDateKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const StreakDashboard: React.FC<StreakDashboardProps> = ({ activeTaskId, pomodoroRunning, refreshKey, onStartTask, onCompleteActiveTask }) => {
@@ -122,7 +132,7 @@ const StreakDashboard: React.FC<StreakDashboardProps> = ({ activeTaskId, pomodor
     }
   };
 
-  const handleAddNew = async (date = new Date().toLocaleDateString('sv-SE')) => {
+  const handleAddNew = async (date = getLocalDateKey()) => {
     const newTask: StreakTask = {
       id: crypto.randomUUID(),
       studyDate: date,
@@ -132,10 +142,12 @@ const StreakDashboard: React.FC<StreakDashboardProps> = ({ activeTaskId, pomodor
       status: 'todo',
       notes: '',
     };
+    setMessage('');
     setTasks(prev => [...prev, newTask]);
     try {
       await saveStreakTask(newTask);
     } catch {
+      setTasks(prev => prev.filter(task => task.id !== newTask.id));
       setMessage(text.addFail);
     }
   };
@@ -147,6 +159,25 @@ const StreakDashboard: React.FC<StreakDashboardProps> = ({ activeTaskId, pomodor
       await deleteStreakTask(id);
     } catch {
       setMessage(text.deleteFail);
+    }
+  };
+
+  const handleDeleteDay = async (date: string) => {
+    if (!confirm(text.deleteDayAsk)) return;
+    const previousTasks = tasks;
+    const previousNote = dayNotes[date];
+    setTasks(prev => prev.filter(task => task.studyDate !== date));
+    setDayNotes(prev => {
+      const next = { ...prev };
+      delete next[date];
+      return next;
+    });
+    try {
+      await deleteStreakDay(date);
+    } catch {
+      setTasks(previousTasks);
+      if (previousNote) setDayNotes(prev => ({ ...prev, [date]: previousNote }));
+      setMessage(text.deleteDayFail);
     }
   };
 
@@ -164,7 +195,7 @@ const StreakDashboard: React.FC<StreakDashboardProps> = ({ activeTaskId, pomodor
           <h2 className="text-2xl font-black text-slate-950">{text.title}</h2>
           <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">{text.desc}</p>
         </div>
-        <button onClick={() => handleAddNew()} className="rounded-xl bg-blue-600 px-5 py-3 text-xs font-black text-white shadow-lg shadow-blue-200 hover:bg-blue-700">{text.addDay}</button>
+        <button type="button" onClick={() => void handleAddNew(getLocalDateKey())} className="rounded-xl bg-blue-600 px-5 py-3 text-xs font-black text-white shadow-lg shadow-blue-200 hover:bg-blue-700">{text.addDay}</button>
       </div>
 
       {message && <div className="rounded-xl bg-blue-50 p-4 font-bold text-blue-700">{message}</div>}
@@ -179,7 +210,10 @@ const StreakDashboard: React.FC<StreakDashboardProps> = ({ activeTaskId, pomodor
               <div className="font-black text-slate-950">{formatViDate(date)}</div>
               <input value={note.totalHours} onChange={event => handleDayNoteChange(date, 'totalHours', event.target.value)} placeholder={text.target} className="bg-white px-3 py-2 text-sm font-bold outline-none ring-1 ring-slate-200 focus:ring-blue-500" />
               <input value={note.notes} onChange={event => handleDayNoteChange(date, 'notes', event.target.value)} placeholder={text.dayNote} className="bg-white px-3 py-2 text-sm font-semibold outline-none ring-1 ring-slate-200 focus:ring-blue-500" />
-              <button onClick={() => handleAddNew(date)} className="rounded-xl bg-blue-600 px-3 py-1.5 text-[10px] font-black text-white">{text.addRow}</button>
+              <div className="flex items-center justify-end gap-2">
+                <button type="button" onClick={() => void handleAddNew(date)} className="rounded-xl bg-blue-600 px-3 py-1.5 text-[10px] font-black text-white">{text.addRow}</button>
+                <button type="button" onClick={() => void handleDeleteDay(date)} title={text.deleteDay} aria-label={text.deleteDay} className="grid h-8 w-8 place-items-center rounded-xl text-slate-300 transition hover:bg-red-50 hover:text-red-500"><i className="fa-solid fa-trash-can" /></button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">

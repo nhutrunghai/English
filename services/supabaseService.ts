@@ -295,6 +295,28 @@ export const saveDailyCheckinSettings = async (settings: DailyCheckinSettings): 
   return true;
 };
 
+export const deleteStreakDay = async (studyDate: string): Promise<boolean> => {
+  if (!supabase) return false;
+
+  const userId = await ownerId();
+  const { error: tasksError } = await supabase
+    .from('streak_tasks')
+    .delete()
+    .eq('owner_id', userId)
+    .eq('study_date', studyDate);
+
+  if (tasksError) throw tasksError;
+
+  const { error: noteError } = await supabase
+    .from('streak_day_notes')
+    .delete()
+    .eq('owner_id', userId)
+    .eq('study_date', studyDate);
+
+  if (noteError) throw noteError;
+  return true;
+};
+
 export const resetDailyCheckins = async (): Promise<boolean> => {
   if (!supabase) return false;
 
