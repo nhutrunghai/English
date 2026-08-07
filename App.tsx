@@ -41,6 +41,8 @@ const App: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [generationStatus, setGenerationStatus] = useState<'idle' | 'processing' | 'ready' | 'error'>('idle');
   const [generationFileName, setGenerationFileName] = useState('');
+  const [editingListId, setEditingListId] = useState<string | null>(null);
+  const [editingListName, setEditingListName] = useState('');
   const [signedIn, setSignedIn] = useState(!isSupabaseConfigured);
   const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
   const [studyMinutes, setStudyMinutes] = useState(() => Number(localStorage.getItem('lingosnap_study_minutes')) || 25);
@@ -368,12 +370,15 @@ const App: React.FC = () => {
   };
 
   const handleRenameList = async (list: VocabList) => {
-    const name = prompt('Tên bộ bài tập', list.name)?.trim();
-    if (!name || name === list.name) return;
+    const name = editingListName.trim();
+    if (!name) return;
 
     try {
-      await renameVocabularyList(list.id, name);
-      setRawHistory(prev => prev.map(item => item.listId === list.id ? { ...item, listName: name } : item));
+      if (name !== list.name) {
+        await renameVocabularyList(list.id, name);
+        setRawHistory(prev => prev.map(item => item.listId === list.id ? { ...item, listName: name } : item));
+      }
+      setEditingListId(null);
     } catch (error) {
       alert(error instanceof Error ? `Không thể đổi tên bộ bài tập: ${error.message}` : 'Không thể đổi tên bộ bài tập.');
     }
@@ -406,12 +411,18 @@ const App: React.FC = () => {
           <div className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-700">
             <i className="fa-solid fa-book-open" />
           </div>
-          <h3 className="truncate text-lg font-black tracking-tight text-slate-950">{list.name}</h3>
+          {editingListId === list.id ? (
+            <form onSubmit={event => { event.preventDefault(); handleRenameList(list); }} className="flex items-center gap-2">
+              <input autoFocus value={editingListName} onChange={event => setEditingListName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setEditingListId(null); }} className="min-w-0 flex-1 rounded-lg border border-blue-400 bg-blue-50 px-2 py-1 text-lg font-black tracking-tight text-slate-950 outline-none" aria-label="Tên bộ bài tập" />
+              <button type="submit" title="Lưu tên" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600 text-white"><i className="fa-solid fa-check" /></button>
+              <button type="button" onClick={() => setEditingListId(null)} title="Hủy" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500"><i className="fa-solid fa-xmark" /></button>
+            </form>
+          ) : <h3 className="truncate text-lg font-black tracking-tight text-slate-950">{list.name}</h3>}
           <p className="mt-2 text-sm font-bold text-slate-400">{list.date} • {list.items.length} câu hỏi</p>
           {!compact && <p className="mt-3 text-sm font-semibold text-slate-500">Dạng: {Array.from(new Set(list.items.map(item => item.type))).join(', ')}</p>}
         </div>
         <div className="relative z-10 flex shrink-0 gap-1">
-          <button onClick={() => handleRenameList(list)} title="Đổi tên bộ bài tập" className="grid h-9 w-9 place-items-center rounded-xl text-slate-300 transition hover:bg-blue-50 hover:text-blue-600"><i className="fa-solid fa-pen" /></button>
+          <button onClick={() => { setEditingListId(list.id); setEditingListName(list.name); }} title="Đổi tên bộ bài tập" className="grid h-9 w-9 place-items-center rounded-xl text-slate-300 transition hover:bg-blue-50 hover:text-blue-600"><i className="fa-solid fa-pen" /></button>
           <button onClick={() => handleDeleteList(list.id)} className="grid h-9 w-9 place-items-center rounded-xl text-slate-300 transition hover:bg-red-50 hover:text-red-500"><i className="fa-solid fa-trash-can" /></button>
         </div>
       </div>
