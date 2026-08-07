@@ -59,9 +59,7 @@ export enum AppMode {
   VOCA = 'VOCA',
   NOTE = 'NOTE',
   POMODORO = 'POMODORO',
-  STREAK = 'STREAK',
-  DAILY_CHECKIN = 'DAILY_CHECKIN',
-  LIVE_PROMO = 'LIVE_PROMO'
+  STREAK = 'STREAK'
 }
 
 export interface QuizState {

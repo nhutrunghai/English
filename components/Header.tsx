@@ -15,8 +15,6 @@ const navItems = [
   { mode: AppMode.NOTE, label: 'Note', icon: 'fa-note-sticky' },
   { mode: AppMode.POMODORO, label: 'Pomodoro', icon: 'fa-fire' },
   { mode: AppMode.STREAK, label: 'Streak', icon: 'fa-table-list' },
-  { mode: AppMode.DAILY_CHECKIN, label: 'Tickbox', icon: 'fa-square-check' },
-  { mode: AppMode.LIVE_PROMO, label: 'OBS Live', icon: 'fa-tower-broadcast' },
 ];
 
 const Header: React.FC<HeaderProps> = ({ mode, onNavigate, onSync, syncing }) => {
@@ -60,10 +58,6 @@ const Header: React.FC<HeaderProps> = ({ mode, onNavigate, onSync, syncing }) =>
             <i className={`fa-solid fa-arrows-rotate text-lg lg:w-5 ${syncing ? 'animate-spin' : ''}`} />
             <span className="hidden lg:inline">{'\u0110\u1ed3ng b\u1ed9'}</span>
           </button>
-          <div className="hidden rounded-2xl bg-slate-950 p-4 text-white lg:block">
-            <div className="mb-2 text-xs font-black uppercase tracking-widest text-cyan-300">Focus mode</div>
-            <p className="text-sm font-semibold text-slate-300">{'Vào Tickbox sau 22:00 VN để đánh dấu mỗi ngày.'}</p>
-          </div>
         </div>
       </div>
     </aside>

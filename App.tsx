@@ -12,8 +12,6 @@ import CelebrationOverlay from './components/CelebrationOverlay';
 import StreakDashboard from './components/StreakDashboard';
 import VocaDashboard from './components/VocaDashboard';
 import NoteDashboard from './components/NoteDashboard';
-import DailyCheckinDashboard from './components/DailyCheckinDashboard';
-import LivePromoDashboard from './components/LivePromoDashboard';
 import HeroSlideshow from './components/HeroSlideshow';
 import AuthGate from './components/AuthGate';
 import { extractExercisesFromImage } from './services/openaiService';
@@ -26,7 +24,6 @@ const getModeTitle = (mode: AppMode) => {
   if (mode === AppMode.VOCA) return 'Voca c\u00e1 nh\u00e2n';
   if (mode === AppMode.NOTE) return 'Note c\u00e1 nh\u00e2n';
   if (mode === AppMode.STREAK) return 'K\u1ebf ho\u1ea1ch & Streak';
-  if (mode === AppMode.DAILY_CHECKIN) return 'Tickbox hằng ngày';
   if (mode === AppMode.CROP) return 'C\u1eaft \u1ea3nh b\u00e0i t\u1eadp';
   if (mode === AppMode.EDITOR) return 'Ch\u1ec9nh s\u1eeda d\u1eef li\u1ec7u';
   if (mode === AppMode.QUIZ) return 'Luy\u1ec7n t\u1eadp';
@@ -35,10 +32,7 @@ const getModeTitle = (mode: AppMode) => {
 };
 
 const App: React.FC = () => {
-  const [mode, setMode] = useState<AppMode>(() => {
-    const requestedMode = new URLSearchParams(window.location.search).get('mode');
-    return requestedMode === AppMode.LIVE_PROMO ? AppMode.LIVE_PROMO : AppMode.HOME;
-  });
+  const [mode, setMode] = useState<AppMode>(AppMode.HOME);
   const [activeList, setActiveList] = useState<ExerciseItem[]>([]);
   const [tempList, setTempList] = useState<ExerciseItem[]>([]);
   const [rawHistory, setRawHistory] = useState<ExerciseItem[]>([]);
@@ -106,7 +100,6 @@ const App: React.FC = () => {
     { label: 'Note', value: dashboardStats.notes, icon: 'fa-note-sticky', target: AppMode.NOTE, className: 'from-amber-500 to-orange-500 shadow-amber-100' },
     { label: 'Pomodoro', value: dashboardStats.pomodoroSessions, sub: `${Math.round(dashboardStats.pomodoroMinutes / 60)}h`, icon: 'fa-fire', target: AppMode.POMODORO, className: 'from-rose-500 to-red-500 shadow-rose-100' },
     { label: 'Streak xong', value: dashboardStats.streakDone, sub: `${dashboardStats.streakDoing} \u0111ang h\u1ecdc`, icon: 'fa-check-double', target: AppMode.STREAK, className: 'from-slate-900 to-slate-700 shadow-slate-200' },
-    { label: 'Tickbox', value: '✓', sub: 'Sau 22:00 VN', icon: 'fa-square-check', target: AppMode.DAILY_CHECKIN, className: 'from-emerald-600 to-green-500 shadow-emerald-100' },
   ];
 
   const initData = async () => {
@@ -347,10 +340,6 @@ const App: React.FC = () => {
     initData();
   };
 
-  if (mode === AppMode.LIVE_PROMO && new URLSearchParams(window.location.search).get('obs') === '1') {
-    return <LivePromoDashboard secondsLeft={pomodoroSecondsLeft} running={pomodoroRunning} initialSeconds={pomodoroInitialSeconds} activeTaskTitle={activeStreakTask?.subject || ''} onToggle={togglePomodoro} onReset={resetPomodoro} />;
-  }
-
   if (!authChecked) {
     return (
       <div className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_32rem),linear-gradient(135deg,#f8fafc,#eef2ff)] text-slate-950">
@@ -474,8 +463,6 @@ const App: React.FC = () => {
           {mode === AppMode.QUIZ && <QuizContainer list={activeList} onExit={() => setMode(AppMode.HOME)} />}
           {mode === AppMode.PRONUNCIATION && <PronunciationMode list={activeList} onNext={() => setMode(AppMode.QUIZ)} />}
           {mode === AppMode.STREAK && <StreakDashboard activeTaskId={activeStreakTask?.id || null} pomodoroRunning={pomodoroRunning} refreshKey={streakRefreshKey} onStartTask={startStreakTaskPomodoro} onCompleteActiveTask={() => completeStreakTask()} />}
-          {mode === AppMode.DAILY_CHECKIN && <DailyCheckinDashboard />}
-          {mode === AppMode.LIVE_PROMO && <LivePromoDashboard secondsLeft={pomodoroSecondsLeft} running={pomodoroRunning} initialSeconds={pomodoroInitialSeconds} activeTaskTitle={activeStreakTask?.subject || ''} onToggle={togglePomodoro} onReset={resetPomodoro} />}
           {mode === AppMode.VOCA && <VocaDashboard />}
           {mode === AppMode.NOTE && <NoteDashboard />}
           {mode === AppMode.POMODORO && <PomodoroDashboard secondsLeft={pomodoroSecondsLeft} running={pomodoroRunning} studyMinutes={studyMinutes} breakMinutes={breakMinutes} savingSession={savingPomodoro} onToggle={togglePomodoro} onReset={resetPomodoro} onUpdateSettings={updatePomodoroSettings} />}
