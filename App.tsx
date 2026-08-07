@@ -494,13 +494,13 @@ const App: React.FC = () => {
   );
 
   const renderLibraryListRow = (list: VocabList) => (
-    <div key={list.id} draggable onDragStart={() => setDraggedListId(list.id)} onDragEnd={() => setDraggedListId(null)} className="group flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 transition hover:border-blue-300 hover:bg-blue-50/40">
+    <div key={list.id} draggable={editingListId !== list.id} onDragStart={() => { if (editingListId !== list.id) setDraggedListId(list.id); }} onDragEnd={() => setDraggedListId(null)} className={`group flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 transition hover:border-blue-300 hover:bg-blue-50/40 ${editingListId === list.id ? 'cursor-text' : 'cursor-grab'}`}>
       <i className="fa-solid fa-grip-vertical cursor-grab text-xs text-slate-300" />
       <i className="fa-solid fa-book-open text-sm text-slate-500" />
       <div className="min-w-0 flex-1">
         {editingListId === list.id ? (
           <form onSubmit={event => { event.preventDefault(); handleRenameList(list); }} className="flex items-center gap-2">
-            <input autoFocus value={editingListName} onChange={event => setEditingListName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setEditingListId(null); }} className="min-w-0 flex-1 border border-blue-400 bg-white px-2 py-1 text-sm font-black outline-none" />
+            <input autoFocus value={editingListName} onMouseDown={event => event.stopPropagation()} onDragStart={event => event.preventDefault()} onChange={event => setEditingListName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setEditingListId(null); }} className="min-w-0 flex-1 border border-blue-400 bg-white px-2 py-1 text-sm font-black outline-none" />
             <button type="submit" className="text-blue-600"><i className="fa-solid fa-check" /></button>
             <button type="button" onClick={() => setEditingListId(null)} className="text-slate-400"><i className="fa-solid fa-xmark" /></button>
           </form>
