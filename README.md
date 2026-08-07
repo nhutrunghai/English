@@ -58,8 +58,6 @@ Tạo file `.env.local`:
 ```env
 VITE_SUPABASE_URL=your-project-url
 VITE_SUPABASE_ANON_KEY=your-publishable-or-anon-key
-VITE_OPENAI_API_KEY=your-openai-api-key
-VITE_OPENAI_MODEL=gpt-4o-mini
 ```
 
 > Lưu ý: nếu deploy web tĩnh, API key phía client có thể bị lộ. Chỉ nên dùng cho project cá nhân và đặt usage limit.

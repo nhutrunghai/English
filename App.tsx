@@ -350,8 +350,10 @@ const App: React.FC = () => {
         setTimeout(() => setSaveStatus('idle'), 2000);
         initData();
       }
-    } catch {
+    } catch (error) {
       setSaveStatus('error');
+      alert(error instanceof Error ? `Không thể lưu vào Supabase: ${error.message}` : 'Không thể lưu vào Supabase.');
+      return;
     }
     setMode(AppMode.PRONUNCIATION);
   };
