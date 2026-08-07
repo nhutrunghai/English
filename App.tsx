@@ -82,6 +82,7 @@ const App: React.FC = () => {
   const [exerciseFolders, setExerciseFolders] = useState<ExerciseFolder[]>([]);
   const [folderName, setFolderName] = useState('');
   const [draggedListId, setDraggedListId] = useState<string | null>(null);
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(() => new Set(['unfiled']));
   const [dashboardStats, setDashboardStats] = useState({
     vocaWords: 0,
     notes: 0,
@@ -492,23 +493,52 @@ const App: React.FC = () => {
     </article>
   );
 
-  const renderFolderSection = (title: string, folderId: string | null, lists: VocabList[], folder?: ExerciseFolder) => (
-    <section
-      key={folderId || 'unfiled'}
-      onDragOver={event => event.preventDefault()}
-      onDrop={() => { if (draggedListId) handleMoveListToFolder(draggedListId, folderId); }}
-      className={`rounded-2xl border p-5 transition ${draggedListId ? 'border-dashed border-blue-400 bg-blue-50/50' : 'border-white/70 bg-white/50'}`}
-    >
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-600"><i className="fa-solid fa-folder" /></span>
-          <div className="min-w-0"><h3 className="truncate text-lg font-black text-slate-950">{title}</h3><p className="text-xs font-bold text-slate-500">{lists.length} bộ bài tập · Kéo thẻ vào đây để sắp xếp</p></div>
-        </div>
-        {folder && <button onClick={() => handleDeleteFolder(folder)} title="Xóa thư mục" className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"><i className="fa-solid fa-trash" /></button>}
+  const renderLibraryListRow = (list: VocabList) => (
+    <div key={list.id} draggable onDragStart={() => setDraggedListId(list.id)} onDragEnd={() => setDraggedListId(null)} className="group flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 transition hover:border-blue-300 hover:bg-blue-50/40">
+      <i className="fa-solid fa-grip-vertical cursor-grab text-xs text-slate-300" />
+      <i className="fa-solid fa-book-open text-sm text-slate-500" />
+      <div className="min-w-0 flex-1">
+        {editingListId === list.id ? (
+          <form onSubmit={event => { event.preventDefault(); handleRenameList(list); }} className="flex items-center gap-2">
+            <input autoFocus value={editingListName} onChange={event => setEditingListName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setEditingListId(null); }} className="min-w-0 flex-1 border border-blue-400 bg-white px-2 py-1 text-sm font-black outline-none" />
+            <button type="submit" className="text-blue-600"><i className="fa-solid fa-check" /></button>
+            <button type="button" onClick={() => setEditingListId(null)} className="text-slate-400"><i className="fa-solid fa-xmark" /></button>
+          </form>
+        ) : <p className="truncate text-sm font-black text-slate-900">{list.name}</p>}
+        <p className="mt-0.5 truncate text-[11px] font-bold text-slate-400">{list.date} · {list.items.length} câu hỏi · {Array.from(new Set(list.items.map(item => item.type))).join(', ')}</p>
       </div>
-      {lists.length ? <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">{lists.map(list => renderListCard(list))}</div> : <div className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-6 text-center text-sm font-bold text-slate-400">Thả bộ bài tập vào thư mục này.</div>}
-    </section>
+      <div className="flex shrink-0 items-center gap-1">
+        <button onClick={() => { setEditingListId(list.id); setEditingListName(list.name); }} title="Đổi tên" className="grid h-8 w-8 place-items-center text-slate-400 hover:text-blue-600"><i className="fa-solid fa-pen" /></button>
+        <button onClick={() => handleDeleteList(list.id)} title="Xóa" className="grid h-8 w-8 place-items-center text-slate-400 hover:text-rose-600"><i className="fa-solid fa-trash" /></button>
+        <button onClick={() => { setActiveList(list.items); setMode(AppMode.QUIZ); }} className="rounded-md bg-slate-950 px-3 py-1.5 text-xs font-black text-white transition hover:bg-blue-600"><i className="fa-solid fa-play mr-1" />Ôn</button>
+      </div>
+    </div>
   );
+
+  const renderFolderSection = (title: string, folderId: string | null, lists: VocabList[], folder?: ExerciseFolder) => {
+    const treeId = folderId || 'unfiled';
+    const expanded = expandedFolderIds.has(treeId);
+    const toggle = () => setExpandedFolderIds(previous => {
+      const next = new Set(previous);
+      if (next.has(treeId)) next.delete(treeId); else next.add(treeId);
+      return next;
+    });
+
+    return (
+      <section key={treeId} onDragOver={event => event.preventDefault()} onDrop={() => { if (draggedListId) handleMoveListToFolder(draggedListId, folderId); }} className={`overflow-hidden rounded-xl border transition ${draggedListId ? 'border-dashed border-blue-400 bg-blue-50/50' : 'border-slate-200 bg-white'}`}>
+        <div className="flex items-center gap-2 px-3 py-2.5">
+          <button onClick={toggle} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+            <i className={`fa-solid fa-chevron-right text-[10px] text-slate-400 transition ${expanded ? 'rotate-90' : ''}`} />
+            <i className="fa-solid fa-folder text-base text-blue-600" />
+            <span className="truncate text-sm font-black text-slate-950">{title}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-500">{lists.length}</span>
+          </button>
+          {folder && <button onClick={() => handleDeleteFolder(folder)} title="Xóa thư mục" className="grid h-8 w-8 place-items-center text-slate-400 transition hover:text-rose-600"><i className="fa-solid fa-trash" /></button>}
+        </div>
+        {expanded && <div className="border-t border-slate-100 bg-slate-50/70 p-2.5"><div className="space-y-2 border-l-2 border-blue-100 pl-3">{lists.length ? lists.map(renderLibraryListRow) : <p className="py-2 text-xs font-bold text-slate-400">Kéo bộ bài tập vào đây.</p>}</div></div>}
+      </section>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_32rem),linear-gradient(135deg,#f8fafc,#eef2ff)] text-slate-950">
