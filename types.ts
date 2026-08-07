@@ -10,6 +10,7 @@ export interface ExerciseItem {
   options?: string[];
   imageB64?: string;
   image_b64?: string; // Khai bÃ¡o cáº£ snake_case cho tÆ°Æ¡ng thÃ­ch
+  listName?: string;
   dateLearned: string;
 }
 
@@ -36,6 +37,12 @@ export interface VocaWord {
   note: string;
   createdAt: string;
   updatedAt: string;
+  reviewCount: number;
+  lapseCount: number;
+  lastReviewedAt: string;
+  nextReviewAt: string;
+  intervalDays: number;
+  easeFactor: number;
 }
 
 export interface NoteItem {

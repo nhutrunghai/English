@@ -26,6 +26,7 @@ const ownerId = async () => {
 const normalizeExercise = (item: any): ExerciseItem => ({
   id: String(item.id || crypto.randomUUID()),
   listId: String(item.list_id || item.listId || 'default'),
+  listName: String(item.list_name || item.listName || ''),
   type: item.type || 'VOCAB',
   imageB64: item.image_b64 || item.imageB64 || '',
   instruction: item.instruction || '',
@@ -57,6 +58,7 @@ export const saveVocabularyList = async (items: ExerciseItem[]): Promise<boolean
       id: item.id || crypto.randomUUID(),
       owner_id: userId,
       list_id: item.listId || 'default',
+      list_name: item.listName || '',
       type: item.type || 'VOCAB',
       image_b64: item.imageB64 || '',
       instruction: item.instruction || '',
@@ -245,6 +247,19 @@ export const deleteStreakDay = async (studyDate: string): Promise<boolean> => {
   if (noteError) throw noteError;
   return true;
 };
+
+export const renameVocabularyList = async (listId: string, name: string): Promise<boolean> => {
+  if (!supabase) return false;
+
+  const { error } = await supabase
+    .from('exercise_items')
+    .update({ list_name: name.trim() })
+    .eq('owner_id', await ownerId())
+    .eq('list_id', listId);
+
+  if (error) throw error;
+  return true;
+};
 const normalizeVocaWord = (row: any): VocaWord => ({
   id: String(row.id || crypto.randomUUID()),
   word: String(row.word || ''),
@@ -254,6 +269,12 @@ const normalizeVocaWord = (row: any): VocaWord => ({
   note: String(row.note || ''),
   createdAt: String(row.created_at || ''),
   updatedAt: String(row.updated_at || row.created_at || ''),
+  reviewCount: Number(row.review_count || 0),
+  lapseCount: Number(row.lapse_count || 0),
+  lastReviewedAt: String(row.last_reviewed_at || ''),
+  nextReviewAt: String(row.next_review_at || ''),
+  intervalDays: Number(row.interval_days || 0),
+  easeFactor: Number(row.ease_factor || 2.5),
 });
 
 export const fetchVocaWords = async (): Promise<VocaWord[]> => {
@@ -281,6 +302,12 @@ export const saveVocaWord = async (word: Partial<VocaWord> & { word: string }): 
     ipa: word.ipa || '',
     example: word.example || '',
     note: word.note || '',
+    review_count: word.reviewCount || 0,
+    lapse_count: word.lapseCount || 0,
+    last_reviewed_at: word.lastReviewedAt || null,
+    next_review_at: word.nextReviewAt || null,
+    interval_days: word.intervalDays || 0,
+    ease_factor: word.easeFactor || 2.5,
     updated_at: new Date().toISOString(),
   };
 
@@ -305,6 +332,30 @@ export const deleteVocaWord = async (id: string): Promise<boolean> => {
 
   if (error) throw error;
   return true;
+};
+
+export const saveVocaReview = async (word: VocaWord): Promise<VocaWord> => {
+  if (!supabase) throw new Error('Supabase is not configured');
+
+  const userId = await ownerId();
+  const { data, error } = await supabase
+    .from('voca_words')
+    .update({
+      review_count: word.reviewCount,
+      lapse_count: word.lapseCount,
+      last_reviewed_at: word.lastReviewedAt || null,
+      next_review_at: word.nextReviewAt || null,
+      interval_days: word.intervalDays,
+      ease_factor: word.easeFactor,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', word.id)
+    .eq('owner_id', userId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return normalizeVocaWord(data);
 };
 
 

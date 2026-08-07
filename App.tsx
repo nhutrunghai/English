@@ -15,7 +15,7 @@ import NoteDashboard from './components/NoteDashboard';
 import HeroSlideshow from './components/HeroSlideshow';
 import AuthGate from './components/AuthGate';
 import { extractExercisesFromImage, extractExercisesFromPdf } from './services/openaiService';
-import { deleteVocabularyList, fetchNotes, fetchPomodoroSessions, fetchStreakTasks, fetchVocaWords, fetchVocabulary, isSupabaseConfigured, savePomodoroSession, saveStreakTask, saveVocabularyList, supabase } from './services/supabaseService';
+import { deleteVocabularyList, fetchNotes, fetchPomodoroSessions, fetchStreakTasks, fetchVocaWords, fetchVocabulary, isSupabaseConfigured, renameVocabularyList, savePomodoroSession, saveStreakTask, saveVocabularyList, supabase } from './services/supabaseService';
 import { StreakTask } from './services/streakTypes';
 
 const getModeTitle = (mode: AppMode) => {
@@ -82,7 +82,7 @@ const App: React.FC = () => {
 
         groups[listId] = {
           id: listId,
-          name: listId === 'default' ? '\u0042\u1ed9 b\u00e0i t\u1eadp m\u1eb7c \u0111\u1ecbnh' : `\u0042\u00e0i t\u1eadp l\u00fac ${timeStr}`,
+          name: item.listName || (listId === 'default' ? '\u0042\u1ed9 b\u00e0i t\u1eadp m\u1eb7c \u0111\u1ecbnh' : `\u0042\u00e0i t\u1eadp l\u00fac ${timeStr}`),
           date: item.dateLearned,
           items: []
         };
@@ -313,7 +313,8 @@ const App: React.FC = () => {
     try {
       const extracted = await extractExercisesFromPdf(file);
       const listId = `list_${Date.now()}`;
-      setTempList(extracted.map(item => ({ ...item, listId })));
+      const listName = `Bài tập từ ${file.name.replace(/\.pdf$/i, '')}`;
+      setTempList(extracted.map(item => ({ ...item, listId, listName })));
       setGenerationStatus('ready');
       setMode(currentMode => currentMode === AppMode.PROCESSING ? AppMode.EDITOR : currentMode);
     } catch (error) {
@@ -330,7 +331,8 @@ const App: React.FC = () => {
     try {
       const extracted = await extractExercisesFromImage(base64);
       const listId = `list_${Date.now()}`;
-      setTempList(extracted.map(item => ({ ...item, listId, imageB64: item.imageB64 || base64 })));
+      const listName = `Bài tập lúc ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+      setTempList(extracted.map(item => ({ ...item, listId, listName, imageB64: item.imageB64 || base64 })));
       setGenerationStatus('ready');
       setMode(currentMode => currentMode === AppMode.PROCESSING ? AppMode.EDITOR : currentMode);
     } catch (error) {
@@ -365,6 +367,18 @@ const App: React.FC = () => {
     initData();
   };
 
+  const handleRenameList = async (list: VocabList) => {
+    const name = prompt('Tên bộ bài tập', list.name)?.trim();
+    if (!name || name === list.name) return;
+
+    try {
+      await renameVocabularyList(list.id, name);
+      setRawHistory(prev => prev.map(item => item.listId === list.id ? { ...item, listName: name } : item));
+    } catch (error) {
+      alert(error instanceof Error ? `Không thể đổi tên bộ bài tập: ${error.message}` : 'Không thể đổi tên bộ bài tập.');
+    }
+  };
+
   if (!authChecked) {
     return (
       <div className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_32rem),linear-gradient(135deg,#f8fafc,#eef2ff)] text-slate-950">
@@ -396,9 +410,10 @@ const App: React.FC = () => {
           <p className="mt-2 text-sm font-bold text-slate-400">{list.date} • {list.items.length} câu hỏi</p>
           {!compact && <p className="mt-3 text-sm font-semibold text-slate-500">Dạng: {Array.from(new Set(list.items.map(item => item.type))).join(', ')}</p>}
         </div>
-        <button onClick={() => handleDeleteList(list.id)} className="relative z-10 grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-300 transition hover:bg-red-50 hover:text-red-500">
-          <i className="fa-solid fa-trash-can" />
-        </button>
+        <div className="relative z-10 flex shrink-0 gap-1">
+          <button onClick={() => handleRenameList(list)} title="Đổi tên bộ bài tập" className="grid h-9 w-9 place-items-center rounded-xl text-slate-300 transition hover:bg-blue-50 hover:text-blue-600"><i className="fa-solid fa-pen" /></button>
+          <button onClick={() => handleDeleteList(list.id)} className="grid h-9 w-9 place-items-center rounded-xl text-slate-300 transition hover:bg-red-50 hover:text-red-500"><i className="fa-solid fa-trash-can" /></button>
+        </div>
       </div>
       <button onClick={() => { setActiveList(list.items); setMode(AppMode.QUIZ); }} className="relative z-10 mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 py-2.5 text-sm font-black text-white transition hover:bg-blue-600">
         <i className="fa-solid fa-play" />

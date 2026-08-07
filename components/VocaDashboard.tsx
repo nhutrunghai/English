@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { VocaWord } from '../types';
 import { enrichVocabularyWord } from '../services/openaiService';
 import { deleteVocaWord, fetchVocaWords, isSupabaseConfigured, saveVocaWord } from '../services/supabaseService';
+import VocaPractice from './VocaPractice';
 
 const text = {
   emptySpeak: 'Nh\u1eadp t\u1eeb tr\u01b0\u1edbc r\u1ed3i m\u1edbi ph\u00e1t \u00e2m \u0111\u01b0\u1ee3c.',
@@ -41,6 +42,9 @@ const text = {
   loading: '\u0110ang t\u1ea3i Voca...',
   emptyList: 'Ch\u01b0a c\u00f3 t\u1eeb n\u00e0o. Th\u00eam t\u1eeb \u0111\u1ea7u ti\u00ean \u1edf form b\u00ean tr\u00e1i nh\u00e9.',
   noMeaning: 'Ch\u01b0a c\u00f3 ngh\u0129a.',
+  practiceToday: 'Luyện hôm nay',
+  dueToday: 'Cần ôn hôm nay',
+  reviewed: 'Đã ôn',
 };
 
 const emptyDraft: Partial<VocaWord> & { word: string } = {
@@ -85,6 +89,10 @@ const VocaDashboard: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [practicing, setPracticing] = useState(false);
+
+  const dueWords = useMemo(() => words.filter(item => item.nextReviewAt && new Date(item.nextReviewAt).getTime() <= Date.now()).length, [words]);
+  const reviewedWords = useMemo(() => words.filter(item => item.reviewCount > 0).length, [words]);
 
   const filteredWords = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -189,15 +197,19 @@ const VocaDashboard: React.FC = () => {
             <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-300">Personal Voca</p>
             <h2 className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">{text.heroTitle}</h2>
             <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-slate-300">{text.heroDesc}</p>
+            <button onClick={() => setPracticing(true)} disabled={words.length === 0} className="mt-5 inline-flex items-center gap-2 bg-cyan-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"><i className="fa-solid fa-graduation-cap" />{text.practiceToday}</button>
           </div>
           <div className="grid grid-cols-3 divide-x divide-slate-200 bg-slate-50 text-center">
             <div className="p-5"><div className="text-2xl font-black">{words.length}</div><div className="text-xs font-bold text-slate-500">{text.savedWords}</div></div>
-            <div className="p-5"><div className="text-2xl font-black">{words.filter(item => item.ipa).length}</div><div className="text-xs font-bold text-slate-500">{text.hasIpa}</div></div>
-            <div className="p-5"><div className="text-2xl font-black">{words.filter(item => item.example).length}</div><div className="text-xs font-bold text-slate-500">{text.hasExample}</div></div>
+            <div className="p-5"><div className="text-2xl font-black">{dueWords}</div><div className="text-xs font-bold text-slate-500">{text.dueToday}</div></div>
+            <div className="p-5"><div className="text-2xl font-black">{reviewedWords}</div><div className="text-xs font-bold text-slate-500">{text.reviewed}</div></div>
           </div>
         </div>
       </section>
 
+      {practicing ? (
+        <VocaPractice words={words} onClose={() => setPracticing(false)} onReviewed={saved => setWords(prev => prev.map(item => item.id === saved.id ? saved : item))} />
+      ) : (
       <section className="grid gap-5 xl:grid-cols-[420px_1fr]">
         <div className="border border-slate-200 bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
@@ -267,6 +279,7 @@ const VocaDashboard: React.FC = () => {
           )}
         </div>
       </section>
+      )}
     </div>
   );
 };

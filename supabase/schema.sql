@@ -8,6 +8,7 @@ create table if not exists public.exercise_items (
   answer text not null default '',
   options jsonb not null default '[]'::jsonb,
   image_b64 text not null default '',
+  list_name text not null default '',
   date_learned text not null default '',
   created_at timestamptz not null default now()
 );
@@ -95,6 +96,12 @@ create table if not exists public.voca_words (
   ipa text not null default '',
   example text not null default '',
   note text not null default '',
+  review_count integer not null default 0,
+  lapse_count integer not null default 0,
+  last_reviewed_at timestamptz,
+  next_review_at timestamptz,
+  interval_days integer not null default 0,
+  ease_factor numeric(3,2) not null default 2.50,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -110,6 +117,7 @@ create policy "users manage own voca words"
 
 create index if not exists voca_words_owner_created_idx on public.voca_words(owner_id, created_at desc);
 create index if not exists voca_words_owner_word_idx on public.voca_words(owner_id, lower(word));
+create index if not exists voca_words_owner_next_review_idx on public.voca_words(owner_id, next_review_at);
 
 
 
