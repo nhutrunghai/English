@@ -640,7 +640,7 @@ const App: React.FC = () => {
               {false ? (
                 <div className="rounded-lg bg-white p-7 text-center font-bold text-slate-400 shadow-xl shadow-slate-200/60">Chưa có bộ từ nào.</div>
               ) : (
-                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">{groupedLists.map(list => renderListCard(list))}</div>
+                <div className="hidden grid gap-4 lg:grid-cols-2 xl:grid-cols-3">{groupedLists.map(list => renderListCard(list))}</div>
               )}
             </div>
           )}
