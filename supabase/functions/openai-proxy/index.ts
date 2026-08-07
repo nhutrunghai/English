@@ -21,6 +21,15 @@ Trích xuất tất cả bài tập, mỗi câu hỏi là một object riêng. V
 const vocabularyPrompt = (word: string) => `Bạn là trợ lý từ điển Anh-Việt. Trả về DUY NHẤT JSON object hợp lệ cho từ/cụm từ: "${word}".
 {"meaning":"nghĩa tiếng Việt ngắn gọn","ipa":"phiên âm IPA","example":"1 câu ví dụ tiếng Anh ngắn + nghĩa tiếng Việt trong ngoặc"}`;
 
+const pdfExerciseContext = `
+
+PDF CONTEXT RULES:
+First identify the PDF type from its content and headings.
+1. If it is a homework, worksheet, test, or exam PDF, extract every actual exercise in the document. Do not omit questions.
+2. If it is a lesson, lecture, textbook, handout, or teaching-slides PDF, do NOT turn all explanatory lesson text into questions. Instead, identify core vocabulary explicitly taught or emphasized and create concise vocabulary-retrieval questions only for that vocabulary. Extract every actual in-class exercise, practice, task, worksheet, review, or quiz, especially sections near the lower/end part of the document. Ignore long explanations, grammar theory, teaching-only examples, headers, and decorative text unless they are explicitly an exercise.
+3. Preserve real exercises accurately enough for a learner to answer. Do not create a question from every sentence in a lesson.
+4. For MATCHING, question contains the left entries separated by " | ", options contains every right entry, and answer is a JSON array of every pair: [{"left":"a","right":"apple"}].`;
+
 const outputText = (payload: any) => payload.output_text || payload.output?.flatMap((item: any) => item.content || []).map((content: any) => content.text || '').join('') || '';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
@@ -61,7 +70,7 @@ Deno.serve(async (request) => {
     if (body.action === 'extract_exercises') {
       if (!['image', 'pdf'].includes(body.sourceType) || typeof body.content !== 'string') return json({ ok: false, error: 'Dữ liệu tài liệu không hợp lệ.' }, 400);
       input = [{ role: 'user', content: [
-        { type: 'input_text', text: `${exercisePrompt}\n\nFor MATCHING, question MUST contain the left-side entries separated by " | ", options MUST contain the right-side entries, and answer MUST be a JSON array of exact pairs, for example [{"left":"a","right":"apple"},{"left":"an","right":"orange"}]. Never leave MATCHING answer blank.` },
+        { type: 'input_text', text: `${exercisePrompt}${body.sourceType === 'pdf' ? pdfExerciseContext : ''}\n\nFor MATCHING, question MUST contain the left-side entries separated by " | ", options MUST contain the right-side entries, and answer MUST be a JSON array of exact pairs, for example [{"left":"a","right":"apple"},{"left":"an","right":"orange"}]. Never leave MATCHING answer blank.` },
         body.sourceType === 'pdf'
           ? { type: 'input_file', filename: String(body.filename || 'worksheet.pdf'), file_data: body.content }
           : { type: 'input_image', image_url: body.content, detail: 'high' },
