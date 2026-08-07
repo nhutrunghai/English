@@ -189,6 +189,10 @@ const VocaDashboard: React.FC = () => {
     }
   };
 
+  if (practicing) {
+    return <VocaPractice words={words} onClose={() => setPracticing(false)} onReviewed={saved => setWords(prev => prev.map(item => item.id === saved.id ? saved : item))} />;
+  }
+
   return (
     <div className="space-y-5">
       <section className="overflow-hidden border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
@@ -207,9 +211,6 @@ const VocaDashboard: React.FC = () => {
         </div>
       </section>
 
-      {practicing ? (
-        <VocaPractice words={words} onClose={() => setPracticing(false)} onReviewed={saved => setWords(prev => prev.map(item => item.id === saved.id ? saved : item))} />
-      ) : (
       <section className="grid gap-5 xl:grid-cols-[420px_1fr]">
         <div className="border border-slate-200 bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
           <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
@@ -279,7 +280,6 @@ const VocaDashboard: React.FC = () => {
           )}
         </div>
       </section>
-      )}
     </div>
   );
 };
