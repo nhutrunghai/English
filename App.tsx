@@ -31,8 +31,23 @@ const getModeTitle = (mode: AppMode) => {
   return 'Dashboard c\u00e1 nh\u00e2n';
 };
 
+const LAST_CATEGORY_KEY = 'lingosnap_last_category';
+const persistentCategories = new Set<AppMode>([
+  AppMode.HOME,
+  AppMode.HISTORY,
+  AppMode.VOCA,
+  AppMode.NOTE,
+  AppMode.POMODORO,
+  AppMode.STREAK,
+]);
+
+const getSavedCategory = (): AppMode => {
+  const savedMode = localStorage.getItem(LAST_CATEGORY_KEY) as AppMode | null;
+  return savedMode && persistentCategories.has(savedMode) ? savedMode : AppMode.HOME;
+};
+
 const App: React.FC = () => {
-  const [mode, setMode] = useState<AppMode>(AppMode.HOME);
+  const [mode, setMode] = useState<AppMode>(getSavedCategory);
   const [activeList, setActiveList] = useState<ExerciseItem[]>([]);
   const [tempList, setTempList] = useState<ExerciseItem[]>([]);
   const [rawHistory, setRawHistory] = useState<ExerciseItem[]>([]);
@@ -73,6 +88,10 @@ const App: React.FC = () => {
     streakDoing: 0,
     streakTodo: 0,
   });
+
+  useEffect(() => {
+    if (persistentCategories.has(mode)) localStorage.setItem(LAST_CATEGORY_KEY, mode);
+  }, [mode]);
 
   const groupedLists = useMemo(() => {
     const groups: { [key: string]: VocabList } = {};
