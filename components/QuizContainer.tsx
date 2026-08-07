@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ExerciseItem, QuizState } from '../types';
+import { resolveMatchingPairs } from '../services/openaiService';
 
 interface QuizContainerProps {
   list: ExerciseItem[];
@@ -17,8 +18,10 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
   });
   const [orderingWords, setOrderingWords] = useState<string[]>([]);
   const [orderingSelected, setOrderingSelected] = useState<string[]>([]);
-  const [matchingSelectedLeft, setMatchingSelectedLeft] = useState<string | null>(null);
+  const [matchingSelectedRight, setMatchingSelectedRight] = useState<string | null>(null);
   const [matchingPairs, setMatchingPairs] = useState<Record<string, string>>({});
+  const [resolvedMatchingPairs, setResolvedMatchingPairs] = useState<Record<string, string>>({});
+  const [resolvingMatching, setResolvingMatching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const currentItem = list[state.currentIndex];
@@ -32,8 +35,9 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
       feedback: null,
     }));
     setOrderingSelected([]);
-    setMatchingSelectedLeft(null);
+    setMatchingSelectedRight(null);
     setMatchingPairs({});
+    setResolvedMatchingPairs({});
 
     if (currentItem.type === 'ORDERING') {
       const words = currentItem.question.split(/\s*\|\s*/).filter(Boolean);
@@ -44,6 +48,18 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
 
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [state.currentIndex, currentItem]);
+
+  useEffect(() => {
+    if (!currentItem || currentItem.type !== 'MATCHING' || currentItem.answer.trim()) return;
+    let cancelled = false;
+    setResolvingMatching(true);
+    resolveMatchingPairs(currentItem).then(pairs => {
+      if (!cancelled) setResolvedMatchingPairs(pairs);
+    }).catch(error => console.error('Could not resolve legacy matching item', error)).finally(() => {
+      if (!cancelled) setResolvingMatching(false);
+    });
+    return () => { cancelled = true; };
+  }, [currentItem]);
 
   if (!currentItem || state.isFinished) {
     return (
@@ -113,26 +129,26 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
   const matchingAnswer = (() => {
     try {
       const parsed = JSON.parse(currentItem.answer || '[]');
-      return Array.isArray(parsed) ? parsed.reduce<Record<string, string>>((pairs, pair) => ({ ...pairs, [String(pair.left)]: String(pair.right) }), {}) : {};
+      return Array.isArray(parsed) ? parsed.reduce<Record<string, string>>((pairs, pair) => ({ ...pairs, [String(pair.right)]: String(pair.left) }), {}) : resolvedMatchingPairs;
     } catch {
-      return {};
+      return resolvedMatchingPairs;
     }
   })();
   const hasMatchingAnswer = Object.keys(matchingAnswer).length > 0;
 
-  const selectMatchingRight = (right: string) => {
-    if (!matchingSelectedLeft || state.feedback) return;
-    setMatchingPairs(previous => ({ ...previous, [matchingSelectedLeft]: right }));
-    setMatchingSelectedLeft(null);
+  const selectMatchingLeft = (left: string) => {
+    if (!matchingSelectedRight || state.feedback) return;
+    setMatchingPairs(previous => ({ ...previous, [matchingSelectedRight]: left }));
+    setMatchingSelectedRight(null);
   };
 
   const checkMatching = () => {
-    if (state.feedback || Object.keys(matchingPairs).length !== matchingLeft.length) return;
+    if (state.feedback || Object.keys(matchingPairs).length !== matchingRight.length) return;
     if (!hasMatchingAnswer) {
       setState(previous => ({ ...previous, feedback: 'incorrect' }));
       return;
     }
-    const correct = matchingLeft.every(left => matchingPairs[left] === matchingAnswer[left]);
+    const correct = matchingRight.every(right => matchingPairs[right] === matchingAnswer[right]);
     checkAnswer(correct ? '__matching_correct__' : '__matching_incorrect__');
   };
 
@@ -222,24 +238,27 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
 
       {showMatchingUI && (
         <div className="space-y-4">
-          <p className="text-center text-xs font-bold text-slate-500">Chọn một ô bên trái, sau đó chọn ô phù hợp ở bên phải để nối thành cặp.</p>
+          <p className="text-center text-xs font-bold text-slate-500">Chọn một từ bên phải, rồi chọn nhóm phù hợp ở bên trái để nối thành cặp.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               {matchingLeft.map(left => (
-                <button key={left} disabled={!!state.feedback} onClick={() => setMatchingSelectedLeft(left)} className={`flex w-full items-center justify-between rounded-xl border-2 px-4 py-3 text-left text-sm font-black transition ${matchingSelectedLeft === left ? 'border-blue-500 bg-blue-50 text-blue-700' : matchingPairs[left] ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-100 text-slate-700 hover:border-blue-300'}`}>
-                  <span>{left}</span>{matchingPairs[left] && <span className="ml-2 text-xs font-bold">→ {matchingPairs[left]}</span>}
+                <button key={left} disabled={!!state.feedback || !matchingSelectedRight} onClick={() => selectMatchingLeft(left)} className={`min-h-14 w-full rounded-xl border-2 px-4 py-3 text-left text-sm font-black transition ${matchingSelectedRight ? 'border-blue-300 bg-blue-50 text-blue-700 hover:border-blue-500' : 'border-slate-100 text-slate-700'}`}>
+                  <span>{left}</span>
+                  <span className="mt-2 flex flex-wrap gap-1">{Object.entries(matchingPairs).filter(([, mappedLeft]) => mappedLeft === left).map(([right]) => <span key={right} className="rounded-md bg-white px-2 py-1 text-xs text-slate-700">{right}</span>)}</span>
                 </button>
               ))}
             </div>
             <div className="space-y-2">
               {matchingRight.map(right => {
-                const paired = Object.values(matchingPairs).includes(right);
-                return <button key={right} disabled={!!state.feedback || !matchingSelectedLeft || paired} onClick={() => selectMatchingRight(right)} className={`w-full rounded-xl border-2 px-4 py-3 text-left text-sm font-bold transition ${paired ? 'border-slate-100 bg-slate-50 text-slate-400' : matchingSelectedLeft ? 'border-blue-200 bg-white text-slate-700 hover:border-blue-500 hover:bg-blue-50' : 'border-slate-100 text-slate-500'}`}>{right}</button>;
+                const paired = Boolean(matchingPairs[right]);
+                const assigned = matchingPairs[right];
+                return <button key={right} disabled={!!state.feedback} onClick={() => { setMatchingSelectedRight(right); setMatchingPairs(previous => { const next = { ...previous }; delete next[right]; return next; }); }} className={`w-full rounded-xl border-2 px-4 py-3 text-left text-sm font-bold transition ${matchingSelectedRight === right ? 'border-blue-500 bg-blue-50 text-blue-700' : paired ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-100 text-slate-600 hover:border-blue-300'}`}>{right}{assigned && <span className="ml-2 text-xs">→ {assigned}</span>}</button>;
               })}
             </div>
           </div>
-          {!hasMatchingAnswer && <p className="rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-700">Bài nối này được tạo trước khi hệ thống lưu đáp án từng cặp, nên không thể chấm chính xác. Các bài mới sẽ có đáp án nối đầy đủ.</p>}
-          {!state.feedback && <button disabled={Object.keys(matchingPairs).length !== matchingLeft.length || !hasMatchingAnswer} onClick={checkMatching} className="w-full rounded-xl bg-blue-600 py-4 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">Kiểm tra các cặp nối</button>}
+          {resolvingMatching && <p className="rounded-xl bg-blue-50 p-3 text-center text-xs font-bold text-blue-700">AI đang bổ sung đáp án cho bài nối cũ...</p>}
+          {!hasMatchingAnswer && !resolvingMatching && <p className="rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-700">Bài nối này thiếu đáp án nên chưa thể chấm. Hãy thử lại sau hoặc tạo lại bài tập.</p>}
+          {!state.feedback && <button disabled={Object.keys(matchingPairs).length !== matchingRight.length || !hasMatchingAnswer} onClick={checkMatching} className="w-full rounded-xl bg-blue-600 py-4 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">Kiểm tra các cặp nối</button>}
         </div>
       )}
 

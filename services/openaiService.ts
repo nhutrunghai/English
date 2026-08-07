@@ -103,3 +103,10 @@ export const evaluateVocabularyAnswer = async (word: VocaWord, answer: string, d
     reason: String(result.reason || 'AI đã đánh giá câu trả lời.'),
   };
 };
+
+export const resolveMatchingPairs = async (item: ExerciseItem): Promise<Record<string, string>> => {
+  const data = await invokeOpenAI({ action: 'resolve_matching_pairs', question: item.question, options: item.options || [], instruction: item.instruction });
+  const parsed = JSON.parse(cleanJson(String(data.outputText || '[]')));
+  if (!Array.isArray(parsed)) return {};
+  return parsed.reduce<Record<string, string>>((pairs, pair) => ({ ...pairs, [String(pair.right || '')]: String(pair.left || '') }), {});
+};

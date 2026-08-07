@@ -36,6 +36,10 @@ Judge semantic equivalence, not exact spelling alone. Accept reasonable Vietname
 Choose one rating: "again" for blank/materially wrong; "hard" for partially correct, uncertain, or correct but notably slow/repeatedly forgotten; "good" for a correct normal recall; "easy" only for a clearly correct, prompt answer with a stable successful history.
 Return exactly: {"rating":"again|hard|good|easy","isCorrect":true,"confidence":0.0,"reason":"short Vietnamese explanation"}.`;
 
+const matchingResolverPrompt = (data: { question: string; options: string[]; instruction: string }) => `Resolve this English matching exercise. Return ONLY a JSON array, with one object for every right-side option: [{"left":"one exact left item","right":"one exact option"}].
+Left-side items: "${data.question}". Right-side options: ${JSON.stringify(data.options)}. Vietnamese instruction: "${data.instruction}".
+Infer the intended relation from the items and instruction. Do not omit options.`;
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405);
@@ -79,6 +83,14 @@ Deno.serve(async (request) => {
         reviewCount: Number(body.reviewCount) || 0,
         lapseCount: Number(body.lapseCount) || 0,
         intervalDays: Number(body.intervalDays) || 0,
+      }) }] }];
+    } else if (body.action === 'resolve_matching_pairs'
+      && typeof body.question === 'string'
+      && Array.isArray(body.options)) {
+      input = [{ role: 'user', content: [{ type: 'input_text', text: matchingResolverPrompt({
+        question: body.question.slice(0, 1000),
+        options: body.options.map(String).slice(0, 50),
+        instruction: typeof body.instruction === 'string' ? body.instruction.slice(0, 1000) : '',
       }) }] }];
     } else {
       return json({ ok: false, error: 'Yêu cầu không hợp lệ.' }, 400);
