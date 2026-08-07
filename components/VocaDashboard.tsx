@@ -57,6 +57,13 @@ const emptyDraft: Partial<VocaWord> & { word: string } = {
 
 type Accent = 'US' | 'UK';
 
+const formatReviewDate = (value?: string) => {
+  if (!value) return 'Chưa có';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Chưa có';
+  return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
+};
+
 const speakWord = (word: string, accent: Accent, onError: (message: string) => void) => {
   const cleanWord = word.trim();
   if (!cleanWord) {
@@ -274,6 +281,11 @@ const VocaDashboard: React.FC = () => {
                   <p className="mt-4 whitespace-pre-line border-t border-slate-100 pt-4 text-sm font-bold leading-6 text-slate-700">{item.meaning || text.noMeaning}</p>
                   {item.example && <p className="mt-3 bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-500">{item.example}</p>}
                   {item.note && <p className="mt-3 text-xs font-bold text-amber-600"><i className="fa-solid fa-note-sticky mr-2" />{item.note}</p>}
+                  <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 text-center">
+                    <div className="rounded-lg bg-slate-50 px-2 py-2"><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Đã ôn</p><p className="mt-1 text-sm font-black text-slate-800">{item.reviewCount || 0} lần</p></div>
+                    <div className="rounded-lg bg-slate-50 px-2 py-2"><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Ôn gần nhất</p><p className="mt-1 text-xs font-black text-slate-800">{formatReviewDate(item.lastReviewedAt)}</p></div>
+                    <div className={`rounded-lg px-2 py-2 ${item.nextReviewAt && new Date(item.nextReviewAt).getTime() <= Date.now() ? 'bg-amber-100' : 'bg-cyan-50'}`}><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Ôn tiếp</p><p className="mt-1 text-xs font-black text-slate-800">{formatReviewDate(item.nextReviewAt)}</p></div>
+                  </div>
                 </article>
               ))}
             </div>
