@@ -14,8 +14,21 @@ const normalizeType = (type: string): ExerciseType => ALLOWED_TYPES.includes(typ
 const toExercises = (outputText: string): ExerciseItem[] => {
   const data = JSON.parse(cleanJson(outputText));
   if (!Array.isArray(data)) return [];
+  const preparedData = data.map((item: any) => {
+    const type = normalizeType(String(item.type || 'VOCAB'));
+    const pairs = Array.isArray(item.answer) ? item.answer
+      .filter((pair: any) => pair && typeof pair.left === 'string' && typeof pair.right === 'string')
+      .map((pair: any) => ({ left: pair.left.trim(), right: pair.right.trim() })) : [];
+    if (type !== 'MATCHING' || !pairs.length) return item;
+    return {
+      ...item,
+      question: Array.from(new Set(pairs.map(pair => pair.left))).join(' | '),
+      options: Array.from(new Set(pairs.map(pair => pair.right))),
+      answer: JSON.stringify(pairs),
+    };
+  });
 
-  return data.map((item: any) => ({
+  return preparedData.map((item: any) => ({
     id: crypto.randomUUID(),
     listId: '',
     type: normalizeType(String(item.type || 'VOCAB')),

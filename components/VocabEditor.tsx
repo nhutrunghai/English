@@ -7,6 +7,23 @@ interface VocabEditorProps {
   onCancel: () => void;
 }
 
+const formatMatchingPairs = (answer: string) => {
+  try {
+    const pairs = JSON.parse(answer);
+    return Array.isArray(pairs) ? pairs.map(pair => `${pair.left} → ${pair.right}`).join(' | ') : answer;
+  } catch {
+    return answer;
+  }
+};
+
+const parseMatchingPairs = (value: string) => {
+  const pairs = value.split('|').map(part => part.trim()).filter(Boolean).map(part => {
+    const [left, right] = part.split('→').map(item => item.trim());
+    return left && right ? { left, right } : null;
+  }).filter(Boolean);
+  return pairs.length ? JSON.stringify(pairs) : value;
+};
+
 const VocabEditor: React.FC<VocabEditorProps> = ({ initialList, onSave, onCancel }) => {
   const [list, setList] = useState<ExerciseItem[]>(initialList);
   const currentListId = initialList.length > 0 ? initialList[0].listId : `list_${Date.now()}`;
@@ -130,8 +147,8 @@ const VocabEditor: React.FC<VocabEditorProps> = ({ initialList, onSave, onCancel
                 <label className="space-y-1.5 text-xs font-bold text-gray-400">
                   ĐÁP ÁN CHÍNH XÁC
                   <input
-                    value={item.answer}
-                    onChange={event => updateItem(item.id, 'answer', event.target.value)}
+                    value={item.type === 'MATCHING' ? formatMatchingPairs(item.answer) : item.answer}
+                    onChange={event => updateItem(item.id, 'answer', item.type === 'MATCHING' ? parseMatchingPairs(event.target.value) : event.target.value)}
                     className="w-full px-4 py-2.5 rounded-xl bg-green-50 text-xs font-bold text-green-700 outline-none focus:bg-white focus:ring-2 focus:ring-green-500"
                     placeholder="Đáp án đúng..."
                   />
