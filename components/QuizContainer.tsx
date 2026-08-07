@@ -17,6 +17,8 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
   });
   const [orderingWords, setOrderingWords] = useState<string[]>([]);
   const [orderingSelected, setOrderingSelected] = useState<string[]>([]);
+  const [matchingSelectedLeft, setMatchingSelectedLeft] = useState<string | null>(null);
+  const [matchingPairs, setMatchingPairs] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
   const currentItem = list[state.currentIndex];
@@ -30,6 +32,8 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
       feedback: null,
     }));
     setOrderingSelected([]);
+    setMatchingSelectedLeft(null);
+    setMatchingPairs({});
 
     if (currentItem.type === 'ORDERING') {
       const words = currentItem.question.split(/\s*\|\s*/).filter(Boolean);
@@ -62,7 +66,7 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
     const normalizedUser = answerText.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
     const normalizedCorrect = currentItem.answer.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
 
-    const isCorrect = normalizedUser === normalizedCorrect;
+    const isCorrect = answerText === '__matching_correct__' ? true : answerText === '__matching_incorrect__' ? false : normalizedUser === normalizedCorrect;
 
     setState(prev => ({
       ...prev,
@@ -104,14 +108,43 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
     }
   };
 
+  const matchingLeft = currentItem.type === 'MATCHING' ? currentItem.question.split(/\s*\|\s*/).filter(Boolean) : [];
+  const matchingRight = currentItem.type === 'MATCHING' ? currentItem.options || [] : [];
+  const matchingAnswer = (() => {
+    try {
+      const parsed = JSON.parse(currentItem.answer || '[]');
+      return Array.isArray(parsed) ? parsed.reduce<Record<string, string>>((pairs, pair) => ({ ...pairs, [String(pair.left)]: String(pair.right) }), {}) : {};
+    } catch {
+      return {};
+    }
+  })();
+  const hasMatchingAnswer = Object.keys(matchingAnswer).length > 0;
+
+  const selectMatchingRight = (right: string) => {
+    if (!matchingSelectedLeft || state.feedback) return;
+    setMatchingPairs(previous => ({ ...previous, [matchingSelectedLeft]: right }));
+    setMatchingSelectedLeft(null);
+  };
+
+  const checkMatching = () => {
+    if (state.feedback || Object.keys(matchingPairs).length !== matchingLeft.length) return;
+    if (!hasMatchingAnswer) {
+      setState(previous => ({ ...previous, feedback: 'incorrect' }));
+      return;
+    }
+    const correct = matchingLeft.every(left => matchingPairs[left] === matchingAnswer[left]);
+    checkAnswer(correct ? '__matching_correct__' : '__matching_incorrect__');
+  };
+
   const getOptions = () => {
     if (currentItem.type === 'TRUE_FALSE') return ['True', 'False'];
     return currentItem.options || [];
   };
 
-  const showChoiceUI = ['MULTIPLE_CHOICE', 'MATCHING', 'TRUE_FALSE'].includes(currentItem.type);
+  const showChoiceUI = ['MULTIPLE_CHOICE', 'TRUE_FALSE'].includes(currentItem.type);
   const showTextUI = ['FILL_BLANK', 'REWRITE', 'VOCAB', 'SHORT_ANSWER'].includes(currentItem.type);
   const showOrderingUI = currentItem.type === 'ORDERING';
+  const showMatchingUI = currentItem.type === 'MATCHING';
 
   return (
     <div className="mx-auto max-w-xl rounded-xl border border-gray-100 bg-white p-6 shadow-2xl animate-slideUp">
@@ -184,6 +217,29 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {showMatchingUI && (
+        <div className="space-y-4">
+          <p className="text-center text-xs font-bold text-slate-500">Chọn một ô bên trái, sau đó chọn ô phù hợp ở bên phải để nối thành cặp.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              {matchingLeft.map(left => (
+                <button key={left} disabled={!!state.feedback} onClick={() => setMatchingSelectedLeft(left)} className={`flex w-full items-center justify-between rounded-xl border-2 px-4 py-3 text-left text-sm font-black transition ${matchingSelectedLeft === left ? 'border-blue-500 bg-blue-50 text-blue-700' : matchingPairs[left] ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-100 text-slate-700 hover:border-blue-300'}`}>
+                  <span>{left}</span>{matchingPairs[left] && <span className="ml-2 text-xs font-bold">→ {matchingPairs[left]}</span>}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-2">
+              {matchingRight.map(right => {
+                const paired = Object.values(matchingPairs).includes(right);
+                return <button key={right} disabled={!!state.feedback || !matchingSelectedLeft || paired} onClick={() => selectMatchingRight(right)} className={`w-full rounded-xl border-2 px-4 py-3 text-left text-sm font-bold transition ${paired ? 'border-slate-100 bg-slate-50 text-slate-400' : matchingSelectedLeft ? 'border-blue-200 bg-white text-slate-700 hover:border-blue-500 hover:bg-blue-50' : 'border-slate-100 text-slate-500'}`}>{right}</button>;
+              })}
+            </div>
+          </div>
+          {!hasMatchingAnswer && <p className="rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-700">Bài nối này được tạo trước khi hệ thống lưu đáp án từng cặp, nên không thể chấm chính xác. Các bài mới sẽ có đáp án nối đầy đủ.</p>}
+          {!state.feedback && <button disabled={Object.keys(matchingPairs).length !== matchingLeft.length || !hasMatchingAnswer} onClick={checkMatching} className="w-full rounded-xl bg-blue-600 py-4 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">Kiểm tra các cặp nối</button>}
         </div>
       )}
 

@@ -57,7 +57,7 @@ Deno.serve(async (request) => {
     if (body.action === 'extract_exercises') {
       if (!['image', 'pdf'].includes(body.sourceType) || typeof body.content !== 'string') return json({ ok: false, error: 'Dữ liệu tài liệu không hợp lệ.' }, 400);
       input = [{ role: 'user', content: [
-        { type: 'input_text', text: exercisePrompt },
+        { type: 'input_text', text: `${exercisePrompt}\n\nFor MATCHING, question MUST contain the left-side entries separated by " | ", options MUST contain the right-side entries, and answer MUST be a JSON array of exact pairs, for example [{"left":"a","right":"apple"},{"left":"an","right":"orange"}]. Never leave MATCHING answer blank.` },
         body.sourceType === 'pdf'
           ? { type: 'input_file', filename: String(body.filename || 'worksheet.pdf'), file_data: body.content }
           : { type: 'input_image', image_url: body.content, detail: 'high' },

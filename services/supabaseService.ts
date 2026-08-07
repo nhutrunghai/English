@@ -1,5 +1,5 @@
 ﻿import { createClient } from '@supabase/supabase-js';
-import { ExerciseItem, NoteItem, PomodoroSession, VocaWord } from '../types';
+import { ExerciseFolder, ExerciseItem, NoteItem, PomodoroSession, VocaWord } from '../types';
 import { StreakDayNote, StreakTask } from './streakTypes';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -27,6 +27,7 @@ const normalizeExercise = (item: any): ExerciseItem => ({
   id: String(item.id || crypto.randomUUID()),
   listId: String(item.list_id || item.listId || 'default'),
   listName: String(item.list_name || item.listName || ''),
+  folderId: String(item.folder_id || item.folderId || ''),
   type: item.type || 'VOCAB',
   imageB64: item.image_b64 || item.imageB64 || '',
   instruction: item.instruction || '',
@@ -59,6 +60,7 @@ export const saveVocabularyList = async (items: ExerciseItem[]): Promise<boolean
       owner_id: userId,
       list_id: item.listId || 'default',
       list_name: item.listName || '',
+      folder_id: item.folderId || null,
       type: item.type || 'VOCAB',
       image_b64: item.imageB64 || '',
       instruction: item.instruction || '',
@@ -260,6 +262,51 @@ export const renameVocabularyList = async (listId: string, name: string): Promis
   if (error) throw error;
   return true;
 };
+
+export const fetchExerciseFolders = async (): Promise<ExerciseFolder[]> => {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('exercise_folders')
+    .select('*')
+    .eq('owner_id', await ownerId())
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({ id: String(row.id), name: String(row.name), createdAt: String(row.created_at || '') }));
+};
+
+export const createExerciseFolder = async (name: string): Promise<ExerciseFolder> => {
+  if (!supabase) throw new Error('Supabase is not configured');
+  const { data, error } = await supabase
+    .from('exercise_folders')
+    .insert({ id: crypto.randomUUID(), owner_id: await ownerId(), name: name.trim() })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return { id: String(data.id), name: String(data.name), createdAt: String(data.created_at || '') };
+};
+
+export const deleteExerciseFolder = async (folderId: string): Promise<boolean> => {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from('exercise_folders')
+    .delete()
+    .eq('id', folderId)
+    .eq('owner_id', await ownerId());
+  if (error) throw error;
+  return true;
+};
+
+export const moveVocabularyListToFolder = async (listId: string, folderId: string | null): Promise<boolean> => {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from('exercise_items')
+    .update({ folder_id: folderId })
+    .eq('list_id', listId)
+    .eq('owner_id', await ownerId());
+  if (error) throw error;
+  return true;
+};
+
 const normalizeVocaWord = (row: any): VocaWord => ({
   id: String(row.id || crypto.randomUUID()),
   word: String(row.word || ''),

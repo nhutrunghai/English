@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AppMode, ExerciseItem, VocabList } from './types';
+import { AppMode, ExerciseFolder, ExerciseItem, VocabList } from './types';
 import Header from './components/Header';
 import ImageUploader from './components/ImageUploader';
 import ImageCropper from './components/ImageCropper';
@@ -15,7 +15,7 @@ import NoteDashboard from './components/NoteDashboard';
 import HeroSlideshow from './components/HeroSlideshow';
 import AuthGate from './components/AuthGate';
 import { extractExercisesFromImage, extractExercisesFromPdf } from './services/openaiService';
-import { deleteVocabularyList, fetchNotes, fetchPomodoroSessions, fetchStreakTasks, fetchVocaWords, fetchVocabulary, isSupabaseConfigured, renameVocabularyList, savePomodoroSession, saveStreakTask, saveVocabularyList, supabase } from './services/supabaseService';
+import { createExerciseFolder, deleteExerciseFolder, deleteVocabularyList, fetchExerciseFolders, fetchNotes, fetchPomodoroSessions, fetchStreakTasks, fetchVocaWords, fetchVocabulary, isSupabaseConfigured, moveVocabularyListToFolder, renameVocabularyList, savePomodoroSession, saveStreakTask, saveVocabularyList, supabase } from './services/supabaseService';
 import { StreakTask } from './services/streakTypes';
 
 const getModeTitle = (mode: AppMode) => {
@@ -79,6 +79,9 @@ const App: React.FC = () => {
   });
   const [streakRefreshKey, setStreakRefreshKey] = useState(0);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [exerciseFolders, setExerciseFolders] = useState<ExerciseFolder[]>([]);
+  const [folderName, setFolderName] = useState('');
+  const [draggedListId, setDraggedListId] = useState<string | null>(null);
   const [dashboardStats, setDashboardStats] = useState({
     vocaWords: 0,
     notes: 0,
@@ -105,7 +108,8 @@ const App: React.FC = () => {
           id: listId,
           name: item.listName || (listId === 'default' ? '\u0042\u1ed9 b\u00e0i t\u1eadp m\u1eb7c \u0111\u1ecbnh' : `\u0042\u00e0i t\u1eadp l\u00fac ${timeStr}`),
           date: item.dateLearned,
-          items: []
+          items: [],
+          folderId: item.folderId || '',
         };
       }
       groups[listId].items.push(item);
@@ -131,17 +135,19 @@ const App: React.FC = () => {
       const data = await fetchVocabulary();
       setRawHistory(data || []);
 
-      const [vocaResult, noteResult, pomodoroResult, streakResult] = await Promise.allSettled([
+      const [vocaResult, noteResult, pomodoroResult, streakResult, foldersResult] = await Promise.allSettled([
         fetchVocaWords(),
         fetchNotes(),
         fetchPomodoroSessions(),
         fetchStreakTasks(),
+        fetchExerciseFolders(),
       ]);
 
       const vocaWords = vocaResult.status === 'fulfilled' ? vocaResult.value : [];
       const notes = noteResult.status === 'fulfilled' ? noteResult.value : [];
       const pomodoros = pomodoroResult.status === 'fulfilled' ? pomodoroResult.value : [];
       const streakTasks = streakResult.status === 'fulfilled' ? streakResult.value : [];
+      if (foldersResult.status === 'fulfilled') setExerciseFolders(foldersResult.value);
       setDashboardStats({
         vocaWords: vocaWords.length,
         notes: notes.length,
@@ -403,6 +409,40 @@ const App: React.FC = () => {
     }
   };
 
+  const handleCreateFolder = async () => {
+    const name = folderName.trim();
+    if (!name) return;
+    try {
+      const folder = await createExerciseFolder(name);
+      setExerciseFolders(previous => [folder, ...previous]);
+      setFolderName('');
+    } catch (error) {
+      alert(error instanceof Error ? `Không thể tạo thư mục: ${error.message}` : 'Không thể tạo thư mục.');
+    }
+  };
+
+  const handleMoveListToFolder = async (listId: string, folderId: string | null) => {
+    try {
+      await moveVocabularyListToFolder(listId, folderId);
+      setRawHistory(previous => previous.map(item => item.listId === listId ? { ...item, folderId: folderId || '' } : item));
+    } catch (error) {
+      alert(error instanceof Error ? `Không thể chuyển bộ bài tập: ${error.message}` : 'Không thể chuyển bộ bài tập.');
+    } finally {
+      setDraggedListId(null);
+    }
+  };
+
+  const handleDeleteFolder = async (folder: ExerciseFolder) => {
+    if (!confirm(`Xóa thư mục "${folder.name}"? Các bộ bài tập bên trong sẽ được chuyển ra ngoài.`)) return;
+    try {
+      await deleteExerciseFolder(folder.id);
+      setExerciseFolders(previous => previous.filter(item => item.id !== folder.id));
+      setRawHistory(previous => previous.map(item => item.folderId === folder.id ? { ...item, folderId: '' } : item));
+    } catch (error) {
+      alert(error instanceof Error ? `Không thể xóa thư mục: ${error.message}` : 'Không thể xóa thư mục.');
+    }
+  };
+
   if (!authChecked) {
     return (
       <div className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_32rem),linear-gradient(135deg,#f8fafc,#eef2ff)] text-slate-950">
@@ -423,7 +463,7 @@ const App: React.FC = () => {
   }
 
   const renderListCard = (list: VocabList, compact = false) => (
-    <article key={list.id} className="group relative overflow-hidden rounded-2xl border border-white/70 bg-white p-5 shadow-xl shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-2xl sm:p-5">
+    <article key={list.id} draggable onDragStart={() => setDraggedListId(list.id)} onDragEnd={() => setDraggedListId(null)} className="group relative cursor-grab overflow-hidden rounded-2xl border border-white/70 bg-white p-5 shadow-xl shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-2xl active:cursor-grabbing sm:p-5">
       <div className="absolute -right-10 -top-7 h-28 w-28 rounded-full bg-indigo-100 blur-2xl transition group-hover:bg-cyan-100" />
       <div className="relative flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -450,6 +490,24 @@ const App: React.FC = () => {
         Bắt đầu ôn tập
       </button>
     </article>
+  );
+
+  const renderFolderSection = (title: string, folderId: string | null, lists: VocabList[], folder?: ExerciseFolder) => (
+    <section
+      key={folderId || 'unfiled'}
+      onDragOver={event => event.preventDefault()}
+      onDrop={() => { if (draggedListId) handleMoveListToFolder(draggedListId, folderId); }}
+      className={`rounded-2xl border p-5 transition ${draggedListId ? 'border-dashed border-blue-400 bg-blue-50/50' : 'border-white/70 bg-white/50'}`}
+    >
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-100 text-blue-600"><i className="fa-solid fa-folder" /></span>
+          <div className="min-w-0"><h3 className="truncate text-lg font-black text-slate-950">{title}</h3><p className="text-xs font-bold text-slate-500">{lists.length} bộ bài tập · Kéo thẻ vào đây để sắp xếp</p></div>
+        </div>
+        {folder && <button onClick={() => handleDeleteFolder(folder)} title="Xóa thư mục" className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"><i className="fa-solid fa-trash" /></button>}
+      </div>
+      {lists.length ? <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">{lists.map(list => renderListCard(list))}</div> : <div className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-6 text-center text-sm font-bold text-slate-400">Thả bộ bài tập vào thư mục này.</div>}
+    </section>
   );
 
   return (
@@ -562,7 +620,24 @@ const App: React.FC = () => {
                 </div>
                 <button onClick={() => setMode(AppMode.HOME)} className="rounded-lg bg-white px-4 py-2.5 text-sm font-black text-slate-600 shadow-lg shadow-slate-200/60">Về dashboard</button>
               </div>
-              {groupedLists.length === 0 ? (
+              <section className="rounded-2xl border border-white/70 bg-white/70 p-4 shadow-lg shadow-slate-200/40 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div><p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Thư mục bài tập</p><p className="mt-1 text-sm font-semibold text-slate-500">Tạo thư mục theo từng buổi học, rồi kéo thẻ bài tập vào đó.</p></div>
+                  <div className="flex gap-2">
+                    <input value={folderName} onChange={event => setFolderName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') handleCreateFolder(); }} placeholder="Ví dụ: Buổi 1" className="min-w-0 border border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-blue-400" />
+                    <button onClick={handleCreateFolder} disabled={!folderName.trim()} className="shrink-0 bg-slate-950 px-4 py-2 text-sm font-black text-white transition hover:bg-blue-600 disabled:opacity-50"><i className="fa-solid fa-folder-plus mr-2" />Tạo thư mục</button>
+                  </div>
+                </div>
+              </section>
+              {groupedLists.length === 0 && exerciseFolders.length === 0 ? (
+                <div className="rounded-lg bg-white p-7 text-center font-bold text-slate-400 shadow-xl shadow-slate-200/60">Chưa có bộ bài tập hoặc thư mục nào.</div>
+              ) : (
+                <div className="space-y-5">
+                  {exerciseFolders.map(folder => renderFolderSection(folder.name, folder.id, groupedLists.filter(list => list.folderId === folder.id), folder))}
+                  {renderFolderSection('Chưa phân thư mục', null, groupedLists.filter(list => !list.folderId))}
+                </div>
+              )}
+              {false ? (
                 <div className="rounded-lg bg-white p-7 text-center font-bold text-slate-400 shadow-xl shadow-slate-200/60">Chưa có bộ từ nào.</div>
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">{groupedLists.map(list => renderListCard(list))}</div>

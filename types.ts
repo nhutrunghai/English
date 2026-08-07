@@ -11,6 +11,7 @@ export interface ExerciseItem {
   imageB64?: string;
   image_b64?: string; // Khai bÃ¡o cáº£ snake_case cho tÆ°Æ¡ng thÃ­ch
   listName?: string;
+  folderId?: string;
   dateLearned: string;
 }
 
@@ -19,6 +20,13 @@ export interface VocabList {
   name: string;
   date: string;
   items: ExerciseItem[];
+  folderId?: string;
+}
+
+export interface ExerciseFolder {
+  id: string;
+  name: string;
+  createdAt: string;
 }
 
 export interface PomodoroSession {
