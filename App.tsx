@@ -14,7 +14,7 @@ import VocaDashboard from './components/VocaDashboard';
 import NoteDashboard from './components/NoteDashboard';
 import HeroSlideshow from './components/HeroSlideshow';
 import AuthGate from './components/AuthGate';
-import { extractExercisesFromImage } from './services/openaiService';
+import { extractExercisesFromImage, extractExercisesFromPdf } from './services/openaiService';
 import { deleteVocabularyList, fetchNotes, fetchPomodoroSessions, fetchStreakTasks, fetchVocaWords, fetchVocabulary, isSupabaseConfigured, savePomodoroSession, saveStreakTask, saveVocabularyList, supabase } from './services/supabaseService';
 import { StreakTask } from './services/streakTypes';
 
@@ -304,6 +304,19 @@ const App: React.FC = () => {
     setMode(AppMode.CROP);
   };
 
+  const handlePdfSelect = async (file: File) => {
+    setMode(AppMode.PROCESSING);
+    try {
+      const extracted = await extractExercisesFromPdf(file);
+      const listId = `list_${Date.now()}`;
+      setTempList(extracted.map(item => ({ ...item, listId })));
+      setMode(AppMode.EDITOR);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Không thể đọc file PDF. Vui lòng thử lại!');
+      setMode(AppMode.HOME);
+    }
+  };
+
   const handleCropComplete = async (base64: string) => {
     setMode(AppMode.PROCESSING);
     try {
@@ -426,7 +439,7 @@ const App: React.FC = () => {
                 </div>
               </section>
 
-              <ImageUploader onImageSelect={handleImageSelect} />
+              <ImageUploader onImageSelect={handleImageSelect} onPdfSelect={handlePdfSelect} />
 
               <section className="space-y-5">
                 <div className="flex items-center justify-between gap-4">
