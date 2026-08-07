@@ -39,6 +39,8 @@ const App: React.FC = () => {
   const [sourceImage, setSourceImage] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [generationStatus, setGenerationStatus] = useState<'idle' | 'processing' | 'ready' | 'error'>('idle');
+  const [generationFileName, setGenerationFileName] = useState('');
   const [signedIn, setSignedIn] = useState(!isSupabaseConfigured);
   const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
   const [studyMinutes, setStudyMinutes] = useState(() => Number(localStorage.getItem('lingosnap_study_minutes')) || 25);
@@ -305,28 +307,36 @@ const App: React.FC = () => {
   };
 
   const handlePdfSelect = async (file: File) => {
+    setGenerationFileName(file.name);
+    setGenerationStatus('processing');
     setMode(AppMode.PROCESSING);
     try {
       const extracted = await extractExercisesFromPdf(file);
       const listId = `list_${Date.now()}`;
       setTempList(extracted.map(item => ({ ...item, listId })));
-      setMode(AppMode.EDITOR);
+      setGenerationStatus('ready');
+      setMode(currentMode => currentMode === AppMode.PROCESSING ? AppMode.EDITOR : currentMode);
     } catch (error) {
+      setGenerationStatus('error');
       alert(error instanceof Error ? error.message : 'Không thể đọc file PDF. Vui lòng thử lại!');
-      setMode(AppMode.HOME);
+      setMode(currentMode => currentMode === AppMode.PROCESSING ? AppMode.HOME : currentMode);
     }
   };
 
   const handleCropComplete = async (base64: string) => {
+    setGenerationFileName('Ảnh bài tập');
+    setGenerationStatus('processing');
     setMode(AppMode.PROCESSING);
     try {
       const extracted = await extractExercisesFromImage(base64);
       const listId = `list_${Date.now()}`;
       setTempList(extracted.map(item => ({ ...item, listId, imageB64: item.imageB64 || base64 })));
-      setMode(AppMode.EDITOR);
+      setGenerationStatus('ready');
+      setMode(currentMode => currentMode === AppMode.PROCESSING ? AppMode.EDITOR : currentMode);
     } catch (error) {
+      setGenerationStatus('error');
       alert(error instanceof Error ? error.message : '\u004b\u0068\u00f4ng th\u1ec3 qu\u00e9t \u1ea3nh. Vui l\u00f2ng th\u1eed l\u1ea1i!');
-      setMode(AppMode.HOME);
+      setMode(currentMode => currentMode === AppMode.PROCESSING ? AppMode.HOME : currentMode);
     }
   };
 
@@ -402,6 +412,22 @@ const App: React.FC = () => {
       {saveStatus !== 'idle' && (
         <div className={`fixed right-4 top-5 z-[80] rounded-xl px-4 py-2.5 font-black text-white shadow-2xl ${saveStatus === 'saving' ? 'bg-orange-500' : saveStatus === 'success' ? 'bg-emerald-600' : 'bg-red-600'}`}>
           {saveStatus === 'saving' ? 'Đang lưu vào Supabase...' : saveStatus === 'success' ? 'Đã lưu thành công!' : 'Lỗi lưu dữ liệu'}
+        </div>
+      )}
+
+      {generationStatus !== 'idle' && (
+        <div className={`fixed bottom-5 right-4 z-[80] flex max-w-sm items-center gap-3 rounded-xl px-4 py-3 text-white shadow-2xl ${generationStatus === 'processing' ? 'bg-blue-600' : generationStatus === 'ready' ? 'bg-emerald-600' : 'bg-red-600'}`}>
+          <i className={`fa-solid ${generationStatus === 'processing' ? 'fa-spinner animate-spin' : generationStatus === 'ready' ? 'fa-circle-check' : 'fa-circle-exclamation'} text-lg`} />
+          <div className="min-w-0">
+            <p className="text-sm font-black">{generationStatus === 'processing' ? 'AI đang tạo bài tập' : generationStatus === 'ready' ? 'Bài tập đã sẵn sàng' : 'Tạo bài tập thất bại'}</p>
+            <p className="truncate text-xs font-semibold text-white/80">{generationFileName}</p>
+          </div>
+          {generationStatus === 'ready' && (
+            <button onClick={() => setMode(AppMode.EDITOR)} className="shrink-0 rounded-lg bg-white/20 px-3 py-2 text-xs font-black transition hover:bg-white/30">Mở</button>
+          )}
+          {generationStatus !== 'processing' && (
+            <button onClick={() => setGenerationStatus('idle')} title="Đóng thông báo" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-white/80 transition hover:bg-white/20 hover:text-white"><i className="fa-solid fa-xmark" /></button>
+          )}
         </div>
       )}
 
