@@ -24,6 +24,18 @@ const vocabularyPrompt = (word: string) => `Bạn là trợ lý từ điển Anh
 const outputText = (payload: any) => payload.output_text || payload.output?.flatMap((item: any) => item.content || []).map((content: any) => content.text || '').join('') || '';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
+const evaluationPrompt = (data: { word: string; meaning: string; example: string; answer: string; direction: string; responseSeconds: number; reviewCount: number; lapseCount: number; intervalDays: number }) => `You assess a Vietnamese learner's active-recall answer for one English vocabulary item. Return ONLY valid JSON, no markdown.
+
+Item: English "${data.word}"; Vietnamese meaning "${data.meaning}"; example "${data.example}".
+Question direction: ${data.direction === 'en_to_vi' ? 'English to Vietnamese meaning' : 'Vietnamese meaning to English word'}.
+Learner answer: "${data.answer}".
+Observed signals: response time ${data.responseSeconds}s; previous reviews ${data.reviewCount}; previous lapses ${data.lapseCount}; current interval ${data.intervalDays} days.
+
+Judge semantic equivalence, not exact spelling alone. Accept reasonable Vietnamese synonyms, concise answers, and minor typos that do not change meaning. Treat blank or materially wrong answers as incorrect. Use the learner history and response time only to distinguish recall strength after correctness; do not mark a semantically correct answer wrong merely for being slow.
+
+Choose one rating: "again" for blank/materially wrong; "hard" for partially correct, uncertain, or correct but notably slow/repeatedly forgotten; "good" for a correct normal recall; "easy" only for a clearly correct, prompt answer with a stable successful history.
+Return exactly: {"rating":"again|hard|good|easy","isCorrect":true,"confidence":0.0,"reason":"short Vietnamese explanation"}.`;
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405);
@@ -52,6 +64,22 @@ Deno.serve(async (request) => {
       ] }];
     } else if (body.action === 'enrich_vocabulary' && typeof body.word === 'string') {
       input = [{ role: 'user', content: [{ type: 'input_text', text: vocabularyPrompt(body.word.trim()) }] }];
+    } else if (body.action === 'evaluate_vocabulary_answer'
+      && ['en_to_vi', 'vi_to_en'].includes(body.direction)
+      && typeof body.word === 'string'
+      && typeof body.meaning === 'string'
+      && typeof body.answer === 'string') {
+      input = [{ role: 'user', content: [{ type: 'input_text', text: evaluationPrompt({
+        word: body.word.slice(0, 200),
+        meaning: body.meaning.slice(0, 500),
+        example: typeof body.example === 'string' ? body.example.slice(0, 800) : '',
+        answer: body.answer.slice(0, 1000),
+        direction: body.direction,
+        responseSeconds: Number(body.responseSeconds) || 0,
+        reviewCount: Number(body.reviewCount) || 0,
+        lapseCount: Number(body.lapseCount) || 0,
+        intervalDays: Number(body.intervalDays) || 0,
+      }) }] }];
     } else {
       return json({ ok: false, error: 'Yêu cầu không hợp lệ.' }, 400);
     }

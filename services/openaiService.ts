@@ -1,4 +1,4 @@
-import { ExerciseItem, ExerciseType } from '../types';
+import { ExerciseItem, ExerciseType, VocaWord } from '../types';
 import { supabase } from './supabaseService';
 
 const ALLOWED_TYPES: ExerciseType[] = ['VOCAB', 'MATCHING', 'FILL_BLANK', 'REWRITE', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'ORDERING', 'SHORT_ANSWER'];
@@ -69,5 +69,37 @@ export const enrichVocabularyWord = async (word: string): Promise<{ meaning: str
     meaning: String(result.meaning || ''),
     ipa: String(result.ipa || ''),
     example: String(result.example || ''),
+  };
+};
+
+export type VocabularyAiRating = 'again' | 'hard' | 'good' | 'easy';
+
+export interface VocabularyEvaluation {
+  rating: VocabularyAiRating;
+  isCorrect: boolean;
+  confidence: number;
+  reason: string;
+}
+
+export const evaluateVocabularyAnswer = async (word: VocaWord, answer: string, direction: 'en_to_vi' | 'vi_to_en', responseSeconds: number): Promise<VocabularyEvaluation> => {
+  const data = await invokeOpenAI({
+    action: 'evaluate_vocabulary_answer',
+    word: word.word,
+    meaning: word.meaning,
+    example: word.example,
+    answer,
+    direction,
+    responseSeconds: Math.max(0, Math.round(responseSeconds)),
+    reviewCount: word.reviewCount || 0,
+    lapseCount: word.lapseCount || 0,
+    intervalDays: word.intervalDays || 0,
+  });
+  const result = JSON.parse(cleanJson(String(data.outputText || '{}')));
+  const ratings: VocabularyAiRating[] = ['again', 'hard', 'good', 'easy'];
+  return {
+    rating: ratings.includes(result.rating) ? result.rating : 'hard',
+    isCorrect: Boolean(result.isCorrect),
+    confidence: Math.max(0, Math.min(1, Number(result.confidence) || 0)),
+    reason: String(result.reason || 'AI đã đánh giá câu trả lời.'),
   };
 };

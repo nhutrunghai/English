@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { VocaWord } from '../types';
 import { saveVocaReview } from '../services/supabaseService';
+import { evaluateVocabularyAnswer, VocabularyEvaluation } from '../services/openaiService';
 
 type Rating = 'again' | 'hard' | 'good' | 'easy';
 
@@ -62,7 +63,10 @@ const VocaPractice: React.FC<VocaPracticeProps> = ({ words, onClose, onReviewed 
   const [answer, setAnswer] = useState('');
   const [revealed, setRevealed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
+  const [aiEvaluation, setAiEvaluation] = useState<VocabularyEvaluation | null>(null);
+  const [questionStartedAt, setQuestionStartedAt] = useState(() => Date.now());
   const current = queue[index];
   const promptMeaning = index % 2 === 1;
   const typedCorrect = current
@@ -79,10 +83,38 @@ const VocaPractice: React.FC<VocaPracticeProps> = ({ words, onClose, onReviewed 
       setIndex(value => value + 1);
       setAnswer('');
       setRevealed(false);
+      setAiEvaluation(null);
+      setQuestionStartedAt(Date.now());
     } catch (reviewError) {
       setError(reviewError instanceof Error ? reviewError.message : 'Không thể lưu kết quả ôn tập.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const checkAnswer = async () => {
+    if (!current || checking) return;
+    setChecking(true);
+    setError('');
+    setRevealed(true);
+    try {
+      const evaluation = await evaluateVocabularyAnswer(
+        current,
+        answer,
+        promptMeaning ? 'vi_to_en' : 'en_to_vi',
+        (Date.now() - questionStartedAt) / 1000,
+      );
+      setAiEvaluation(evaluation);
+    } catch (evaluationError) {
+      console.error(evaluationError);
+      setAiEvaluation({
+        rating: typedCorrect ? 'good' : 'again',
+        isCorrect: typedCorrect,
+        confidence: 0,
+        reason: 'Chưa kết nối được AI, nên ứng dụng dùng so khớp cơ bản. Bạn vẫn có thể tự chọn mức đánh giá.',
+      });
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -139,22 +171,22 @@ const VocaPractice: React.FC<VocaPracticeProps> = ({ words, onClose, onReviewed 
                 <>
                   <label className="text-sm font-black text-slate-800" htmlFor="voca-answer">Câu trả lời của bạn</label>
                   <textarea id="voca-answer" autoFocus value={answer} onChange={event => setAnswer(event.target.value)} placeholder="Tự nhớ trước, rồi nhập câu trả lời..." rows={4} className="mt-3 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-4 font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
-                  <button onClick={() => setRevealed(true)} className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-4 text-sm font-black text-white transition hover:bg-blue-700">Kiểm tra đáp án</button>
+                  <button onClick={checkAnswer} disabled={checking} className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-4 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-60">{checking ? 'AI đang đánh giá...' : 'Kiểm tra đáp án bằng AI'}</button>
                 </>
               ) : (
                 <div className="space-y-6">
-                  <div className={`rounded-xl border p-5 ${typedCorrect ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
-                    <p className="text-sm font-black">{typedCorrect ? 'Câu trả lời có vẻ đúng.' : 'So sánh đáp án, rồi tự đánh giá mức độ ghi nhớ.'}</p>
+                  <div className={`rounded-xl border p-5 ${(aiEvaluation?.isCorrect ?? typedCorrect) ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
+                    <p className="text-sm font-black">{checking ? 'AI đang so sánh câu trả lời...' : aiEvaluation ? `AI: ${aiEvaluation.reason}` : typedCorrect ? 'Câu trả lời có vẻ đúng.' : 'So sánh đáp án, rồi tự đánh giá mức độ ghi nhớ.'}</p>
                     <p className="mt-3 text-sm font-semibold">Đáp án: <strong>{promptMeaning ? current.word : current.meaning || 'Chưa có nghĩa'}</strong></p>
                     {current.example && <p className="mt-3 border-t border-black/10 pt-3 text-sm font-semibold text-slate-600">Ví dụ: {current.example}</p>}
                   </div>
                   <div>
-                    <p className="mb-3 text-sm font-black text-slate-800">Bạn nhớ từ này ở mức nào?</p>
+                    <p className="mb-3 text-sm font-black text-slate-800">{aiEvaluation ? `AI đề xuất: ${aiEvaluation.rating === 'again' ? 'Quên' : aiEvaluation.rating === 'hard' ? 'Khó' : aiEvaluation.rating === 'good' ? 'Tốt' : 'Dễ'}. Bạn có thể đổi nếu cần.` : 'Bạn nhớ từ này ở mức nào?'}</p>
                     <div className="grid gap-2 sm:grid-cols-4">
-                      <button disabled={saving} onClick={() => rate('again')} className="rounded-xl bg-rose-100 px-3 py-4 text-sm font-black text-rose-700 transition hover:bg-rose-200 disabled:opacity-50">Quên<span className="mt-1 block text-xs font-bold">ôn lại 1 ngày</span></button>
-                      <button disabled={saving} onClick={() => rate('hard')} className="rounded-xl bg-orange-100 px-3 py-4 text-sm font-black text-orange-700 transition hover:bg-orange-200 disabled:opacity-50">Khó<span className="mt-1 block text-xs font-bold">ôn sớm hơn</span></button>
-                      <button disabled={saving} onClick={() => rate('good')} className="rounded-xl bg-blue-100 px-3 py-4 text-sm font-black text-blue-700 transition hover:bg-blue-200 disabled:opacity-50">Tốt<span className="mt-1 block text-xs font-bold">giãn theo lịch</span></button>
-                      <button disabled={saving} onClick={() => rate('easy')} className="rounded-xl bg-emerald-100 px-3 py-4 text-sm font-black text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50">Dễ<span className="mt-1 block text-xs font-bold">giãn nhiều hơn</span></button>
+                      <button disabled={saving || checking} onClick={() => rate('again')} className={`rounded-xl px-3 py-4 text-sm font-black text-rose-700 transition hover:bg-rose-200 disabled:opacity-50 ${aiEvaluation?.rating === 'again' ? 'ring-2 ring-rose-500 bg-rose-200' : 'bg-rose-100'}`}>Quên<span className="mt-1 block text-xs font-bold">ôn lại 1 ngày</span></button>
+                      <button disabled={saving || checking} onClick={() => rate('hard')} className={`rounded-xl px-3 py-4 text-sm font-black text-orange-700 transition hover:bg-orange-200 disabled:opacity-50 ${aiEvaluation?.rating === 'hard' ? 'ring-2 ring-orange-500 bg-orange-200' : 'bg-orange-100'}`}>Khó<span className="mt-1 block text-xs font-bold">ôn sớm hơn</span></button>
+                      <button disabled={saving || checking} onClick={() => rate('good')} className={`rounded-xl px-3 py-4 text-sm font-black text-blue-700 transition hover:bg-blue-200 disabled:opacity-50 ${aiEvaluation?.rating === 'good' ? 'ring-2 ring-blue-500 bg-blue-200' : 'bg-blue-100'}`}>Tốt<span className="mt-1 block text-xs font-bold">giãn theo lịch</span></button>
+                      <button disabled={saving || checking} onClick={() => rate('easy')} className={`rounded-xl px-3 py-4 text-sm font-black text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50 ${aiEvaluation?.rating === 'easy' ? 'ring-2 ring-emerald-500 bg-emerald-200' : 'bg-emerald-100'}`}>Dễ<span className="mt-1 block text-xs font-bold">giãn nhiều hơn</span></button>
                     </div>
                   </div>
                 </div>
