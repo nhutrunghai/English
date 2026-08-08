@@ -200,7 +200,7 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit, onComplete 
           <button type="button" onClick={() => setIsImageZoomed(true)} className="block w-full cursor-zoom-in" title="PhÃ³ng to áº£nh">
             <img src={currentItem.imageB64} alt="Question context" className="h-[56vh] min-h-[360px] max-h-[560px] w-full mx-auto object-contain" />
           </button>
-          <p className="mt-2 text-center text-[11px] font-bold text-slate-400">Báº¥m vÃ o áº£nh Ä‘á»ƒ phÃ³ng to</p>
+          <p className="mt-2 text-center text-[11px] font-bold text-slate-400">{'B\u1ea5m v\u00e0o \u1ea3nh \u0111\u1ec3 ph\u00f3ng to'}</p>
         </div>
       )}
 

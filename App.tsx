@@ -54,10 +54,16 @@ const cropExerciseImage = (source: string, region: NonNullable<ExerciseItem['ima
       reject(new Error('KhÃ´ng Ä‘á»c Ä‘Æ°á»£c kÃ­ch thÆ°á»›c áº£nh.'));
       return;
     }
-    const x = Math.max(0, Math.min(sourceWidth - 1, Math.round(region.x * sourceWidth)));
-    const y = Math.max(0, Math.min(sourceHeight - 1, Math.round(region.y * sourceHeight)));
-    const width = Math.max(1, Math.min(sourceWidth - x, Math.round(region.width * sourceWidth)));
-    const height = Math.max(1, Math.min(sourceHeight - y, Math.round(region.height * sourceHeight)));
+    // Vision coordinates can end slightly above the final illustration. Add generous
+    // padding around a shared visual block so its last row is not cut off.
+    const paddedLeft = Math.max(0, region.x - 0.04);
+    const paddedTop = Math.max(0, region.y - 0.03);
+    const paddedRight = Math.min(1, region.x + region.width + 0.04);
+    const paddedBottom = Math.min(1, region.y + region.height + 0.24);
+    const x = Math.max(0, Math.min(sourceWidth - 1, Math.round(paddedLeft * sourceWidth)));
+    const y = Math.max(0, Math.min(sourceHeight - 1, Math.round(paddedTop * sourceHeight)));
+    const width = Math.max(1, Math.min(sourceWidth - x, Math.round((paddedRight - paddedLeft) * sourceWidth)));
+    const height = Math.max(1, Math.min(sourceHeight - y, Math.round((paddedBottom - paddedTop) * sourceHeight)));
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
