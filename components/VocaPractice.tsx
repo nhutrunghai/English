@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { VocaWord } from '../types';
 import { saveVocaReview } from '../services/supabaseService';
 import { evaluateVocabularyAnswer, VocabularyEvaluation } from '../services/openaiService';
@@ -10,11 +10,16 @@ const normalize = (value: string) => value.toLowerCase().trim().replace(/[^\p{L}
 const scheduleReview = (word: VocaWord, rating: Rating): VocaWord => {
   const currentInterval = Math.max(0, word.intervalDays || 0);
   const currentEase = Math.max(1.3, word.easeFactor || 2.5);
+  const isLearning = currentInterval === 0 && (word.reviewCount || 0) < 2;
   let intervalDays = 1;
   let easeFactor = currentEase;
   let lapseCount = word.lapseCount || 0;
 
-  if (rating === 'again') {
+  if (isLearning) {
+    intervalDays = 0;
+    if (rating === 'again') lapseCount += 1;
+    if (rating === 'hard') easeFactor = Math.max(1.3, currentEase - 0.1);
+  } else if (rating === 'again') {
     intervalDays = 1;
     easeFactor = Math.max(1.3, currentEase - 0.2);
     lapseCount += 1;
@@ -29,6 +34,9 @@ const scheduleReview = (word: VocaWord, rating: Rating): VocaWord => {
   }
 
   const now = new Date();
+  const nextReviewAt = isLearning
+    ? new Date(now.getTime() + 10 * 60 * 1000).toISOString()
+    : new Date(now.getTime() + intervalDays * 86400000).toISOString();
   return {
     ...word,
     reviewCount: (word.reviewCount || 0) + 1,
@@ -36,7 +44,7 @@ const scheduleReview = (word: VocaWord, rating: Rating): VocaWord => {
     intervalDays,
     easeFactor,
     lastReviewedAt: now.toISOString(),
-    nextReviewAt: new Date(now.getTime() + intervalDays * 86400000).toISOString(),
+    nextReviewAt,
   };
 };
 
@@ -58,7 +66,7 @@ interface VocaPracticeProps {
 }
 
 const VocaPractice: React.FC<VocaPracticeProps> = ({ words, onClose, onReviewed }) => {
-  const queue = useMemo(() => getQueue(words), [words]);
+  const [queue, setQueue] = useState<VocaWord[]>(() => getQueue(words));
   const [index, setIndex] = useState(0);
   const [answer, setAnswer] = useState('');
   const [revealed, setRevealed] = useState(false);
@@ -80,6 +88,8 @@ const VocaPractice: React.FC<VocaPracticeProps> = ({ words, onClose, onReviewed 
     try {
       const saved = await saveVocaReview(scheduleReview(current, rating));
       onReviewed(saved);
+      const repeatLearningRound = current.intervalDays === 0 && current.reviewCount < 2;
+      if (repeatLearningRound) setQueue(previous => [...previous, saved]);
       setIndex(value => value + 1);
       setAnswer('');
       setRevealed(false);
@@ -128,7 +138,7 @@ const VocaPractice: React.FC<VocaPracticeProps> = ({ words, onClose, onReviewed 
         <div className="mx-auto flex max-w-2xl flex-col items-center px-6 py-20 text-center sm:px-10">
           <span className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-3xl text-emerald-600"><i className="fa-solid fa-circle-check" /></span>
           <p className="mt-7 text-xs font-black uppercase tracking-[0.24em] text-emerald-600">Hoàn thành phiên hôm nay</p>
-          <h3 className="mt-3 text-3xl font-black text-slate-950">Bạn đã ôn {queue.length} từ</h3>
+          <h3 className="mt-3 text-3xl font-black text-slate-950">Bạn đã hoàn thành {queue.length} lượt ôn</h3>
           <p className="mt-4 max-w-lg font-semibold leading-7 text-slate-600">Những từ cần ôn tiếp sẽ tự quay lại theo lịch phù hợp với mức độ bạn nhớ. Hãy quay lại vào ngày mai để tiếp tục.</p>
           <button onClick={onClose} className="mt-8 bg-slate-950 px-6 py-3 text-sm font-black text-white transition hover:bg-slate-800">Về kho từ vựng</button>
         </div>
@@ -137,7 +147,7 @@ const VocaPractice: React.FC<VocaPracticeProps> = ({ words, onClose, onReviewed 
   }
 
   const progress = Math.round((index / queue.length) * 100);
-  const isNew = !current.reviewCount;
+  const isNew = current.intervalDays === 0 && current.reviewCount < 3;
 
   return (
     <main className="min-h-[calc(100vh-9rem)] overflow-hidden rounded-[2rem] border border-slate-200 bg-slate-50 shadow-[0_20px_70px_rgba(15,23,42,0.1)]">
@@ -155,7 +165,7 @@ const VocaPractice: React.FC<VocaPracticeProps> = ({ words, onClose, onReviewed 
         <section className="min-w-0">
           <div className="mb-5 flex items-center justify-between gap-4">
             <p className="text-sm font-black text-slate-700">Từ {index + 1} / {queue.length}</p>
-            <p className="text-xs font-bold text-slate-500">{isNew ? 'Từ mới' : `Đã ôn ${current.reviewCount} lần`}</p>
+            <p className="text-xs font-bold text-slate-500">{isNew ? `Học mới · lượt ${(current.reviewCount || 0) + 1}/3` : `Đã ôn ${current.reviewCount} lần`}</p>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-cyan-400 transition-all duration-500" style={{ width: `${progress}%` }} /></div>
 
