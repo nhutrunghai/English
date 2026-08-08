@@ -1,5 +1,8 @@
 import { ExerciseItem, ExerciseType, VocaWord } from '../types';
 import { supabase } from './supabaseService';
+import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+
+GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url).toString();
 
 const ALLOWED_TYPES: ExerciseType[] = ['VOCAB', 'MATCHING', 'FILL_BLANK', 'REWRITE', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'ORDERING', 'SHORT_ANSWER'];
 
@@ -93,6 +96,27 @@ export const extractExercisesFromPdf = async (file: File): Promise<ExerciseItem[
   const content = await readFileAsDataUrl(file);
   const data = await invokeOpenAI({ action: 'extract_exercises', sourceType: 'pdf', content, filename: file.name });
   return toExercises(String(data.outputText || '[]'));
+};
+
+export const renderPdfToImages = async (file: File): Promise<string[]> => {
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    throw new Error('File Ä‘Ã£ chá»n khÃ´ng pháº£i PDF.');
+  }
+  const pdfDocument = await getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const maxPages = Math.min(pdfDocument.numPages, 12);
+  const pages: string[] = [];
+  for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
+    const page = await pdfDocument.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 1.8 });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('KhÃ´ng thá»ƒ render trang PDF.');
+    await page.render({ canvasContext: context, viewport }).promise;
+    pages.push(canvas.toDataURL('image/jpeg', 0.88));
+  }
+  return pages;
 };
 
 export const extractVocabularyFromImage = async (file: File): Promise<Array<Pick<VocaWord, 'word' | 'meaning' | 'ipa' | 'example'>>> => {

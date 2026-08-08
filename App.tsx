@@ -13,7 +13,7 @@ import StreakDashboard from './components/StreakDashboard';
 import VocaDashboard from './components/VocaDashboard';
 import NoteDashboard from './components/NoteDashboard';
 import AuthGate from './components/AuthGate';
-import { extractExercisesFromImage, extractExercisesFromPdf, fetchOpenAiUsageSummary, OpenAiUsageSummary } from './services/openaiService';
+import { extractExercisesFromImage, fetchOpenAiUsageSummary, OpenAiUsageSummary, renderPdfToImages } from './services/openaiService';
 import { createExerciseFolder, deleteExerciseFolder, deleteVocabularyList, fetchExerciseFolders, fetchExerciseProgress, fetchNotes, fetchPomodoroSessions, fetchStreakTasks, fetchVocaWords, fetchVocabulary, isSupabaseConfigured, moveVocabularyListToFolder, renameVocabularyList, saveExerciseProgress, savePomodoroSession, saveStreakTask, saveVocabularyList, supabase } from './services/supabaseService';
 import { StreakTask } from './services/streakTypes';
 
@@ -72,6 +72,20 @@ const cropExerciseImage = (source: string, region: NonNullable<ExerciseItem['ima
   image.onerror = () => reject(new Error('KhÃ´ng táº£i Ä‘Æ°á»£c áº£nh gá»‘c.'));
   image.src = source;
 });
+
+const attachExerciseImages = async (items: ExerciseItem[], source: string, listId: string, listName: string) => Promise.all(items.map(async item => {
+  let imageB64 = item.imageB64 || '';
+  if (item.imageRegion) {
+    try {
+      imageB64 = await cropExerciseImage(source, item.imageRegion);
+    } catch {
+      imageB64 = source;
+    }
+  }
+  const needsVisualContext = /\u0068\u00ec\u006e\u0068|\u1ea3nh|picture|image|look at/i.test(`${item.instruction} ${item.question}`);
+  if (!imageB64 && needsVisualContext) imageB64 = source;
+  return { ...item, listId, listName, imageB64 };
+}));
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(getSavedCategory);
@@ -378,10 +392,15 @@ const App: React.FC = () => {
     setGenerationStatus('processing');
     setMode(AppMode.PROCESSING);
     try {
-      const extracted = await extractExercisesFromPdf(file);
       const listId = `list_${Date.now()}`;
       const listName = `Bài tập từ ${file.name.replace(/\.pdf$/i, '')}`;
-      setTempList(extracted.map(item => ({ ...item, listId, listName })));
+      const pageImages = await renderPdfToImages(file);
+      const prepared: ExerciseItem[] = [];
+      for (const pageImage of pageImages) {
+        const extracted = await extractExercisesFromImage(pageImage);
+        prepared.push(...await attachExerciseImages(extracted, pageImage, listId, listName));
+      }
+      setTempList(prepared);
       setGenerationStatus('ready');
       setMode(currentMode => currentMode === AppMode.PROCESSING ? AppMode.EDITOR : currentMode);
     } catch (error) {
