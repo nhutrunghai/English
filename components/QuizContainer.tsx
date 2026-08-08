@@ -28,6 +28,14 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit, onComplete 
 
   const currentItem = list[state.currentIndex];
 
+  const advanceQuestion = () => {
+    setState(prev => {
+      const nextIndex = prev.currentIndex + 1;
+      if (nextIndex >= list.length) return { ...prev, isFinished: true };
+      return { ...prev, currentIndex: nextIndex };
+    });
+  };
+
   useEffect(() => {
     if (!currentItem) return;
     setState(prev => ({
@@ -50,6 +58,17 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit, onComplete 
 
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [state.currentIndex, currentItem]);
+
+  useEffect(() => {
+    if (!state.feedback) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      advanceQuestion();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [state.feedback, state.currentIndex, list.length]);
 
   useEffect(() => {
     if (state.isFinished && !completionReported.current) {
@@ -100,19 +119,14 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit, onComplete 
       score: isCorrect ? prev.score + 1 : prev.score,
     }));
 
-    setTimeout(() => {
-      setState(prev => {
-        const nextIndex = prev.currentIndex + 1;
-        if (nextIndex >= list.length) {
-          return { ...prev, isFinished: true };
-        }
-        return { ...prev, currentIndex: nextIndex };
-      });
-    }, 2500);
   };
 
   const handleFormSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (state.feedback) {
+      advanceQuestion();
+      return;
+    }
     checkAnswer(state.userInput);
   };
 

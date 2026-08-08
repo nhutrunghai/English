@@ -409,6 +409,8 @@ const App: React.FC = () => {
             imageB64 = base64;
           }
         }
+        const needsVisualContext = /\u0068\u00ec\u006e\u0068|\u1ea3nh|picture|image|look at/i.test(`${item.instruction} ${item.question}`);
+        if (!imageB64 && needsVisualContext) imageB64 = base64;
         return { ...item, listId, listName, imageB64 };
       }));
       setTempList(exercisesWithImages);
