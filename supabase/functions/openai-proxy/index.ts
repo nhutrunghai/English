@@ -49,6 +49,9 @@ const matchingResolverPrompt = (data: { question: string; options: string[]; ins
 Left-side items: "${data.question}". Right-side options: ${JSON.stringify(data.options)}. Vietnamese instruction: "${data.instruction}".
 Infer the intended relation from the items and instruction. Do not omit options.`;
 
+const imageVocabularyPrompt = `Read this vocabulary image carefully. Return ONLY a valid JSON array, with no markdown. Extract every distinct English vocabulary word or phrase that is clearly intended for study. Keep the English exactly as shown where possible. Use Vietnamese meaning shown in the image; if it is missing, provide a concise accurate Vietnamese translation. Include IPA and a short example only when they are clearly visible or reliable. Do not include headings, page numbers, instructions, duplicates, or long explanatory sentences.
+Format: [{"word":"English word or phrase","meaning":"nghĩa tiếng Việt","ipa":"/ipa/ or empty string","example":"short example or empty string"}].`;
+
 const sumCosts = (payload: any) => (payload?.data || []).flatMap((bucket: any) => bucket.results || []).reduce((sum: number, item: any) => sum + Number(item?.amount?.value || 0), 0);
 const sumRequests = (payload: any) => (payload?.data || []).flatMap((bucket: any) => bucket.results || []).reduce((sum: number, item: any) => sum + Number(item?.num_model_requests || 0), 0);
 
@@ -102,6 +105,11 @@ Deno.serve(async (request) => {
         body.sourceType === 'pdf'
           ? { type: 'input_file', filename: String(body.filename || 'worksheet.pdf'), file_data: body.content }
           : { type: 'input_image', image_url: body.content, detail: 'high' },
+      ] }];
+    } else if (body.action === 'extract_vocabulary' && typeof body.content === 'string') {
+      input = [{ role: 'user', content: [
+        { type: 'input_text', text: imageVocabularyPrompt },
+        { type: 'input_image', image_url: body.content, detail: 'high' },
       ] }];
     } else if (body.action === 'enrich_vocabulary' && typeof body.word === 'string') {
       input = [{ role: 'user', content: [{ type: 'input_text', text: vocabularyPrompt(body.word.trim()) }] }];

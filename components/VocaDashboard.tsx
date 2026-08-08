@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { VocaWord } from '../types';
-import { enrichVocabularyWord } from '../services/openaiService';
+import { enrichVocabularyWord, extractVocabularyFromImage } from '../services/openaiService';
 import { deleteVocaWord, fetchVocaWords, isSupabaseConfigured, saveVocaWord } from '../services/supabaseService';
 import VocaPractice from './VocaPractice';
 
@@ -95,6 +95,8 @@ const VocaDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [imageImporting, setImageImporting] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState('');
   const [practicing, setPracticing] = useState(false);
 
@@ -196,6 +198,25 @@ const VocaDashboard: React.FC = () => {
     }
   };
 
+  const importVocabularyImage = async (file: File) => {
+    setImageImporting(true);
+    setMessage('');
+    try {
+      const extracted = await extractVocabularyFromImage(file);
+      const existing = new Set(words.map(item => item.word.trim().toLowerCase()));
+      const unique = extracted.filter(item => !existing.has(item.word.toLowerCase()));
+      const saved = await Promise.all(unique.map(item => saveVocaWord({ ...item, note: 'Nhập từ ảnh' })));
+      setWords(previous => [...saved, ...previous]);
+      setMessage(unique.length ? `Đã thêm ${unique.length} từ từ ảnh.${extracted.length > unique.length ? ` Bỏ qua ${extracted.length - unique.length} từ trùng.` : ''}` : 'Không tìm thấy từ mới trong ảnh.');
+    } catch (error) {
+      console.error(error);
+      setMessage(error instanceof Error ? error.message : 'Không thể đọc từ vựng từ ảnh.');
+    } finally {
+      setImageImporting(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  };
+
   if (practicing) {
     return <VocaPractice words={words} onClose={() => setPracticing(false)} onReviewed={saved => setWords(prev => prev.map(item => item.id === saved.id ? saved : item))} />;
   }
@@ -208,7 +229,11 @@ const VocaDashboard: React.FC = () => {
             <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-300">Personal Voca</p>
             <h2 className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">{text.heroTitle}</h2>
             <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-slate-300">{text.heroDesc}</p>
-            <button onClick={() => setPracticing(true)} disabled={words.length === 0} className="mt-5 inline-flex items-center gap-2 bg-cyan-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"><i className="fa-solid fa-graduation-cap" />{text.practiceToday}</button>
+            <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) importVocabularyImage(file); }} />
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button onClick={() => setPracticing(true)} disabled={words.length === 0} className="inline-flex items-center gap-2 bg-cyan-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"><i className="fa-solid fa-graduation-cap" />{text.practiceToday}</button>
+              <button onClick={() => imageInputRef.current?.click()} disabled={imageImporting} className="inline-flex items-center gap-2 border border-white/30 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/20 disabled:opacity-50"><i className={`fa-solid ${imageImporting ? 'fa-spinner animate-spin' : 'fa-image'}`} />{imageImporting ? 'AI đang đọc ảnh...' : 'Nhập từ từ ảnh'}</button>
+            </div>
           </div>
           <div className="grid grid-cols-3 divide-x divide-slate-200 bg-slate-50 text-center">
             <div className="p-5"><div className="text-2xl font-black">{words.length}</div><div className="text-xs font-bold text-slate-500">{text.savedWords}</div></div>

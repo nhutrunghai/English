@@ -72,6 +72,20 @@ export const extractExercisesFromPdf = async (file: File): Promise<ExerciseItem[
   return toExercises(String(data.outputText || '[]'));
 };
 
+export const extractVocabularyFromImage = async (file: File): Promise<Array<Pick<VocaWord, 'word' | 'meaning' | 'ipa' | 'example'>>> => {
+  if (!file.type.startsWith('image/')) throw new Error('Vui lòng chọn một file ảnh.');
+  const content = await readFileAsDataUrl(file);
+  const data = await invokeOpenAI({ action: 'extract_vocabulary', content, filename: file.name });
+  const parsed = JSON.parse(cleanJson(String(data.outputText || '[]')));
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map((item: any) => ({
+    word: String(item.word || '').trim(),
+    meaning: String(item.meaning || '').trim(),
+    ipa: String(item.ipa || '').trim(),
+    example: String(item.example || '').trim(),
+  })).filter(item => item.word);
+};
+
 export const enrichVocabularyWord = async (word: string): Promise<{ meaning: string; ipa: string; example: string }> => {
   const cleanWord = word.trim();
   if (!cleanWord) throw new Error('Bạn cần nhập từ vựng trước.');
