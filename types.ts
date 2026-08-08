@@ -10,6 +10,7 @@ export interface ExerciseItem {
   options?: string[];
   imageB64?: string;
   image_b64?: string; // Khai bÃ¡o cáº£ snake_case cho tÆ°Æ¡ng thÃ­ch
+  imageRegion?: { x: number; y: number; width: number; height: number };
   listName?: string;
   folderId?: string;
   dateLearned: string;

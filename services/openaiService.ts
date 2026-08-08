@@ -11,6 +11,20 @@ const cleanJson = (text: string) => {
 
 const normalizeType = (type: string): ExerciseType => ALLOWED_TYPES.includes(type as ExerciseType) ? type as ExerciseType : 'VOCAB';
 
+const normalizeImageRegion = (value: any): ExerciseItem['imageRegion'] => {
+  const x = Number(value?.x);
+  const y = Number(value?.y);
+  const width = Number(value?.width);
+  const height = Number(value?.height);
+  if (![x, y, width, height].every(Number.isFinite) || x < 0 || y < 0 || width <= 0 || height <= 0) return undefined;
+  return {
+    x: Math.min(1, x),
+    y: Math.min(1, y),
+    width: Math.min(1 - Math.min(1, x), width),
+    height: Math.min(1 - Math.min(1, y), height),
+  };
+};
+
 const toExercises = (outputText: string): ExerciseItem[] => {
   const data = JSON.parse(cleanJson(outputText));
   if (!Array.isArray(data)) return [];
@@ -37,6 +51,7 @@ const toExercises = (outputText: string): ExerciseItem[] => {
     answer: String(item.answer || ''),
     options: Array.isArray(item.options) ? item.options.map(String) : [],
     imageB64: '',
+    imageRegion: normalizeImageRegion(item.imageRegion),
     dateLearned: new Date().toLocaleDateString('vi-VN'),
   })).filter(item => item.question || item.answer);
 };

@@ -45,6 +45,34 @@ const getSavedCategory = (): AppMode => {
   return savedMode && persistentCategories.has(savedMode) ? savedMode : AppMode.HOME;
 };
 
+const cropExerciseImage = (source: string, region: NonNullable<ExerciseItem['imageRegion']>): Promise<string> => new Promise((resolve, reject) => {
+  const image = new Image();
+  image.onload = () => {
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    if (!sourceWidth || !sourceHeight) {
+      reject(new Error('KhÃ´ng Ä‘á»c Ä‘Æ°á»£c kÃ­ch thÆ°á»›c áº£nh.'));
+      return;
+    }
+    const x = Math.max(0, Math.min(sourceWidth - 1, Math.round(region.x * sourceWidth)));
+    const y = Math.max(0, Math.min(sourceHeight - 1, Math.round(region.y * sourceHeight)));
+    const width = Math.max(1, Math.min(sourceWidth - x, Math.round(region.width * sourceWidth)));
+    const height = Math.max(1, Math.min(sourceHeight - y, Math.round(region.height * sourceHeight)));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      reject(new Error('KhÃ´ng thá»ƒ táº¡o áº£nh bÃ i táº­p.'));
+      return;
+    }
+    context.drawImage(image, x, y, width, height, 0, 0, width, height);
+    resolve(canvas.toDataURL('image/jpeg', 0.9));
+  };
+  image.onerror = () => reject(new Error('KhÃ´ng táº£i Ä‘Æ°á»£c áº£nh gá»‘c.'));
+  image.src = source;
+});
+
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(getSavedCategory);
   const [activeList, setActiveList] = useState<ExerciseItem[]>([]);
@@ -371,7 +399,18 @@ const App: React.FC = () => {
       const extracted = await extractExercisesFromImage(base64);
       const listId = `list_${Date.now()}`;
       const listName = `Bài tập lúc ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
-      setTempList(extracted.map(item => ({ ...item, listId, listName, imageB64: item.imageB64 || base64 })));
+      const exercisesWithImages = await Promise.all(extracted.map(async item => {
+        let imageB64 = item.imageB64 || base64;
+        if (item.imageRegion) {
+          try {
+            imageB64 = await cropExerciseImage(base64, item.imageRegion);
+          } catch {
+            // Keep the original image if a crop cannot be created, so no question loses its visual context.
+          }
+        }
+        return { ...item, listId, listName, imageB64 };
+      }));
+      setTempList(exercisesWithImages);
       setGenerationStatus('ready');
       setMode(currentMode => currentMode === AppMode.PROCESSING ? AppMode.EDITOR : currentMode);
     } catch (error) {
