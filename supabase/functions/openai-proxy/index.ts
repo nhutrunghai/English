@@ -39,7 +39,7 @@ const cleanJson = (text: string) => {
   return fenced ? fenced[1].trim() : trimmed;
 };
 
-const imageRegionPassPrompt = (exercises: string) => `You are an image-region detector. Inspect the uploaded worksheet image and the exercise array below. Return ONLY a valid JSON array. For every item, return {"index":number,"imageRegion":{"x":number,"y":number,"width":number,"height":number}|null}. x, y, width and height MUST be normalized decimal coordinates 0-1 relative to the full image. A region must tightly contain the image, diagram, or illustration needed for that exact question, not its surrounding text. Use null only when the question does not need any image. Do not skip any index.
+const imageRegionPassPrompt = (exercises: string) => `You are an image-region detector. Inspect the uploaded worksheet image and the exercise array below. Return ONLY one valid JSON object with this exact shape: {"visualExerciseIndexes":[number],"imageRegion":{"x":number,"y":number,"width":number,"height":number}|null}. visualExerciseIndexes contains only the exercises that actually require a picture, diagram, or illustration to answer. imageRegion is ONE shared, normalized 0-1 rectangle that contains all illustrations required by those exercises together. Make it a practical large crop: include the complete visual exercise block and its answer blanks, but exclude headers, unrelated text-only exercises, and page footer. If no exercise needs an image, return an empty index array and null. Do not return individual regions per question.
 
 Exercises:
 ${exercises}`;
@@ -172,6 +172,9 @@ Deno.serve(async (request) => {
       try {
         const exercises = JSON.parse(cleanJson(finalOutput));
         if (Array.isArray(exercises) && exercises.length) {
+          // Ignore any per-question region from the extraction pass. We save one shared
+          // visual block per page, which is clearer for the learner and avoids bad matches.
+          exercises.forEach((exercise: any) => delete exercise.imageRegion);
           const regionResponse = await fetch('https://api.openai.com/v1/responses', {
             method: 'POST',
             headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -188,11 +191,12 @@ Deno.serve(async (request) => {
           if (regionResponse.ok) {
             const regionPayload = await regionResponse.json();
             regionUsage = regionPayload.usage || regionUsage;
-            const regions = JSON.parse(cleanJson(outputText(regionPayload)));
-            if (Array.isArray(regions)) {
-              regions.forEach((region: any) => {
-                const index = Number(region?.index);
-                if (Number.isInteger(index) && exercises[index] && region?.imageRegion) exercises[index].imageRegion = region.imageRegion;
+            const regionGroup = JSON.parse(cleanJson(outputText(regionPayload)));
+            if (regionGroup && typeof regionGroup === 'object') {
+              const indexes = Array.isArray(regionGroup.visualExerciseIndexes) ? regionGroup.visualExerciseIndexes : [];
+              indexes.forEach((rawIndex: unknown) => {
+                const index = Number(rawIndex);
+                if (Number.isInteger(index) && exercises[index] && regionGroup.imageRegion) exercises[index].imageRegion = regionGroup.imageRegion;
               });
               finalOutput = JSON.stringify(exercises);
             }
