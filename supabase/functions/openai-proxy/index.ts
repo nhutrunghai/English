@@ -49,6 +49,9 @@ const matchingResolverPrompt = (data: { question: string; options: string[]; ins
 Left-side items: "${data.question}". Right-side options: ${JSON.stringify(data.options)}. Vietnamese instruction: "${data.instruction}".
 Infer the intended relation from the items and instruction. Do not omit options.`;
 
+const sumCosts = (payload: any) => (payload?.data || []).flatMap((bucket: any) => bucket.results || []).reduce((sum: number, item: any) => sum + Number(item?.amount?.value || 0), 0);
+const sumRequests = (payload: any) => (payload?.data || []).flatMap((bucket: any) => bucket.results || []).reduce((sum: number, item: any) => sum + Number(item?.num_model_requests || 0), 0);
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405);
@@ -62,6 +65,30 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json();
+    if (body.action === 'usage_summary') {
+      const adminKey = Deno.env.get('OPENAI_ADMIN_KEY');
+      if (!adminKey) return json({ ok: false, error: 'Chưa cấu hình OPENAI_ADMIN_KEY trên Supabase.' }, 500);
+      const now = new Date();
+      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      const endTime = Math.floor(now.getTime() / 1000);
+      const adminHeaders = { Authorization: `Bearer ${adminKey}` };
+      const makeUrl = (path: string, start: Date) => `https://api.openai.com${path}?start_time=${Math.floor(start.getTime() / 1000)}&end_time=${endTime}&bucket_width=1d&limit=31`;
+      const [todayCostsResponse, monthCostsResponse, todayUsageResponse] = await Promise.all([
+        fetch(makeUrl('/v1/organization/costs', todayStart), { headers: adminHeaders }),
+        fetch(makeUrl('/v1/organization/costs', monthStart), { headers: adminHeaders }),
+        fetch(makeUrl('/v1/organization/usage/completions', todayStart), { headers: adminHeaders }),
+      ]);
+      if (!todayCostsResponse.ok || !monthCostsResponse.ok || !todayUsageResponse.ok) {
+        return json({ ok: false, error: 'Không lấy được dữ liệu Usage/Costs từ OpenAI. Kiểm tra quyền Admin key.' }, 502);
+      }
+      const [todayCosts, monthCosts, todayUsage] = await Promise.all([todayCostsResponse.json(), monthCostsResponse.json(), todayUsageResponse.json()]);
+      const { data: events } = await supabase.from('ai_usage_events').select('action,input_tokens,output_tokens').eq('owner_id', user.id).gte('created_at', monthStart.toISOString());
+      const actionUsage = (events || []).reduce((groups: Record<string, number>, event: any) => ({ ...groups, [event.action]: (groups[event.action] || 0) + Number(event.input_tokens || 0) + Number(event.output_tokens || 0) * 4 }), {});
+      const topAction = Object.entries(actionUsage).sort((a, b) => b[1] - a[1])[0];
+      return json({ ok: true, todayCostUsd: sumCosts(todayCosts), monthCostUsd: sumCosts(monthCosts), todayRequests: sumRequests(todayUsage), topAction: topAction ? { action: topAction[0], estimatedTokenWeight: topAction[1] } : null });
+    }
+
     const apiKey = Deno.env.get('OPENAI_API_KEY');
     if (!apiKey) return json({ ok: false, error: 'Chưa cấu hình OPENAI_API_KEY trên Supabase.' }, 500);
     const model = Deno.env.get('OPENAI_MODEL') || 'gpt-4o-mini';
@@ -111,7 +138,10 @@ Deno.serve(async (request) => {
       body: JSON.stringify({ model, temperature: 0.1, max_output_tokens: body.action === 'extract_exercises' ? 6000 : 500, input }),
     });
     if (!response.ok) return json({ ok: false, error: `OpenAI API error: ${await response.text()}` }, response.status);
-    return json({ ok: true, outputText: outputText(await response.json()) });
+    const responsePayload = await response.json();
+    const usage = responsePayload.usage || {};
+    await supabase.from('ai_usage_events').insert({ owner_id: user.id, action: body.action, model, input_tokens: Number(usage.input_tokens || 0), output_tokens: Number(usage.output_tokens || 0) });
+    return json({ ok: true, outputText: outputText(responsePayload) });
   } catch (error) {
     return json({ ok: false, error: error instanceof Error ? error.message : 'Backend AI gặp lỗi.' }, 500);
   }

@@ -94,6 +94,23 @@ export interface VocabularyEvaluation {
   reason: string;
 }
 
+export interface OpenAiUsageSummary {
+  todayCostUsd: number;
+  monthCostUsd: number;
+  todayRequests: number;
+  topAction: { action: string; estimatedTokenWeight: number } | null;
+}
+
+export const fetchOpenAiUsageSummary = async (): Promise<OpenAiUsageSummary> => {
+  const data = await invokeOpenAI({ action: 'usage_summary' });
+  return {
+    todayCostUsd: Number(data.todayCostUsd || 0),
+    monthCostUsd: Number(data.monthCostUsd || 0),
+    todayRequests: Number(data.todayRequests || 0),
+    topAction: data.topAction?.action ? { action: String(data.topAction.action), estimatedTokenWeight: Number(data.topAction.estimatedTokenWeight || 0) } : null,
+  };
+};
+
 export const evaluateVocabularyAnswer = async (word: VocaWord, answer: string, direction: 'en_to_vi' | 'vi_to_en', responseSeconds: number): Promise<VocabularyEvaluation> => {
   const data = await invokeOpenAI({
     action: 'evaluate_vocabulary_answer',

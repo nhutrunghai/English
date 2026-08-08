@@ -12,9 +12,8 @@ import CelebrationOverlay from './components/CelebrationOverlay';
 import StreakDashboard from './components/StreakDashboard';
 import VocaDashboard from './components/VocaDashboard';
 import NoteDashboard from './components/NoteDashboard';
-import HeroSlideshow from './components/HeroSlideshow';
 import AuthGate from './components/AuthGate';
-import { extractExercisesFromImage, extractExercisesFromPdf } from './services/openaiService';
+import { extractExercisesFromImage, extractExercisesFromPdf, fetchOpenAiUsageSummary, OpenAiUsageSummary } from './services/openaiService';
 import { createExerciseFolder, deleteExerciseFolder, deleteVocabularyList, fetchExerciseFolders, fetchNotes, fetchPomodoroSessions, fetchStreakTasks, fetchVocaWords, fetchVocabulary, isSupabaseConfigured, moveVocabularyListToFolder, renameVocabularyList, savePomodoroSession, saveStreakTask, saveVocabularyList, supabase } from './services/supabaseService';
 import { StreakTask } from './services/streakTypes';
 
@@ -92,6 +91,8 @@ const App: React.FC = () => {
     streakDoing: 0,
     streakTodo: 0,
   });
+  const [aiUsage, setAiUsage] = useState<OpenAiUsageSummary | null>(null);
+  const [aiUsageError, setAiUsageError] = useState('');
 
   useEffect(() => {
     if (persistentCategories.has(mode)) localStorage.setItem(LAST_CATEGORY_KEY, mode);
@@ -136,12 +137,13 @@ const App: React.FC = () => {
       const data = await fetchVocabulary();
       setRawHistory(data || []);
 
-      const [vocaResult, noteResult, pomodoroResult, streakResult, foldersResult] = await Promise.allSettled([
+      const [vocaResult, noteResult, pomodoroResult, streakResult, foldersResult, usageResult] = await Promise.allSettled([
         fetchVocaWords(),
         fetchNotes(),
         fetchPomodoroSessions(),
         fetchStreakTasks(),
         fetchExerciseFolders(),
+        fetchOpenAiUsageSummary(),
       ]);
 
       const vocaWords = vocaResult.status === 'fulfilled' ? vocaResult.value : [];
@@ -149,6 +151,12 @@ const App: React.FC = () => {
       const pomodoros = pomodoroResult.status === 'fulfilled' ? pomodoroResult.value : [];
       const streakTasks = streakResult.status === 'fulfilled' ? streakResult.value : [];
       if (foldersResult.status === 'fulfilled') setExerciseFolders(foldersResult.value);
+      if (usageResult.status === 'fulfilled') {
+        setAiUsage(usageResult.value);
+        setAiUsageError('');
+      } else {
+        setAiUsageError('Chưa tải được thống kê GPT.');
+      }
       setDashboardStats({
         vocaWords: vocaWords.length,
         notes: notes.length,
@@ -582,7 +590,20 @@ const App: React.FC = () => {
           {mode === AppMode.HOME && (
             <div className="space-y-6">
               <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-                <HeroSlideshow />
+                <section className="overflow-hidden rounded-2xl bg-slate-950 p-5 text-white shadow-xl shadow-slate-300/50 sm:p-7">
+                  <div className="flex items-start justify-between gap-4">
+                    <div><p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">OpenAI usage</p><h2 className="mt-2 text-2xl font-black">Chi phí GPT</h2><p className="mt-1 text-sm font-semibold text-slate-300">Dữ liệu chi phí thực tế từ OpenAI, cập nhật khi đồng bộ.</p></div>
+                    <i className="fa-solid fa-chart-line text-2xl text-cyan-300" />
+                  </div>
+                  {aiUsage ? (
+                    <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-xl bg-white/10 p-4"><p className="text-xs font-bold text-slate-300">Chi hôm nay</p><p className="mt-1 text-2xl font-black">${aiUsage.todayCostUsd.toFixed(4)}</p></div>
+                      <div className="rounded-xl bg-white/10 p-4"><p className="text-xs font-bold text-slate-300">Chi tháng này</p><p className="mt-1 text-2xl font-black">${aiUsage.monthCostUsd.toFixed(4)}</p></div>
+                      <div className="rounded-xl bg-white/10 p-4"><p className="text-xs font-bold text-slate-300">Lượt gọi hôm nay</p><p className="mt-1 text-2xl font-black">{aiUsage.todayRequests}</p></div>
+                    </div>
+                  ) : <div className="mt-6 rounded-xl bg-white/10 p-4 text-sm font-bold text-slate-300">{aiUsageError || 'Đang tải thống kê GPT...'}</div>}
+                  <div className="mt-4 flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm font-bold text-cyan-100"><i className="fa-solid fa-bolt" /><span>{aiUsage?.topAction ? `Tốn nhiều nhất tháng này: ${aiUsage.topAction.action === 'extract_exercises' ? 'Quét ảnh/PDF' : aiUsage.topAction.action === 'enrich_vocabulary' ? 'AI điền từ vựng' : aiUsage.topAction.action === 'evaluate_vocabulary_answer' ? 'AI chấm từ vựng' : 'Xử lý bài nối'} (ước tính theo token).` : 'Chức năng tốn nhiều nhất sẽ được ghi nhận từ các lần dùng mới.'}</span></div>
+                </section>
 
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
                   {dashboardCards.map(card => (
