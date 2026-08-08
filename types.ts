@@ -51,6 +51,13 @@ export interface VocaWord {
   nextReviewAt: string;
   intervalDays: number;
   easeFactor: number;
+  folderId?: string;
+}
+
+export interface VocaFolder {
+  id: string;
+  name: string;
+  createdAt: string;
 }
 
 export interface NoteItem {

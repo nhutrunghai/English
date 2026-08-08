@@ -1,5 +1,5 @@
 ﻿import { createClient } from '@supabase/supabase-js';
-import { ExerciseFolder, ExerciseItem, NoteItem, PomodoroSession, VocaWord } from '../types';
+import { ExerciseFolder, ExerciseItem, NoteItem, PomodoroSession, VocaFolder, VocaWord } from '../types';
 import { StreakDayNote, StreakTask } from './streakTypes';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -322,6 +322,7 @@ const normalizeVocaWord = (row: any): VocaWord => ({
   nextReviewAt: String(row.next_review_at || ''),
   intervalDays: Number(row.interval_days || 0),
   easeFactor: Number(row.ease_factor || 2.5),
+  folderId: String(row.folder_id || ''),
 });
 
 export const fetchVocaWords = async (): Promise<VocaWord[]> => {
@@ -355,6 +356,7 @@ export const saveVocaWord = async (word: Partial<VocaWord> & { word: string }): 
     next_review_at: word.nextReviewAt || null,
     interval_days: word.intervalDays || 0,
     ease_factor: word.easeFactor || 2.5,
+    folder_id: word.folderId || null,
     updated_at: new Date().toISOString(),
   };
 
@@ -377,6 +379,27 @@ export const deleteVocaWord = async (id: string): Promise<boolean> => {
     .eq('owner_id', await ownerId())
     .eq('id', id);
 
+  if (error) throw error;
+  return true;
+};
+
+export const fetchVocaFolders = async (): Promise<VocaFolder[]> => {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from('voca_folders').select('*').eq('owner_id', await ownerId()).order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({ id: String(row.id), name: String(row.name), createdAt: String(row.created_at || '') }));
+};
+
+export const createVocaFolder = async (name: string): Promise<VocaFolder> => {
+  if (!supabase) throw new Error('Supabase is not configured');
+  const { data, error } = await supabase.from('voca_folders').insert({ owner_id: await ownerId(), name: name.trim() }).select('*').single();
+  if (error) throw error;
+  return { id: String(data.id), name: String(data.name), createdAt: String(data.created_at || '') };
+};
+
+export const deleteVocaFolder = async (id: string): Promise<boolean> => {
+  if (!supabase) return false;
+  const { error } = await supabase.from('voca_folders').delete().eq('id', id).eq('owner_id', await ownerId());
   if (error) throw error;
   return true;
 };

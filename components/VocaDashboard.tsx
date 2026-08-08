@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { VocaWord } from '../types';
+import { VocaFolder, VocaWord } from '../types';
 import { enrichVocabularyWord, extractVocabularyFromImage } from '../services/openaiService';
-import { deleteVocaWord, fetchVocaWords, isSupabaseConfigured, saveVocaWord } from '../services/supabaseService';
+import { createVocaFolder, deleteVocaFolder, deleteVocaWord, fetchVocaFolders, fetchVocaWords, isSupabaseConfigured, saveVocaWord } from '../services/supabaseService';
 import VocaPractice from './VocaPractice';
 
 const text = {
@@ -90,6 +90,9 @@ const speakWord = (word: string, accent: Accent, onError: (message: string) => v
 
 const VocaDashboard: React.FC = () => {
   const [words, setWords] = useState<VocaWord[]>([]);
+  const [folders, setFolders] = useState<VocaFolder[]>([]);
+  const [activeFolderId, setActiveFolderId] = useState('');
+  const [folderName, setFolderName] = useState('');
   const [draft, setDraft] = useState(emptyDraft);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -99,25 +102,30 @@ const VocaDashboard: React.FC = () => {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState('');
   const [practicing, setPracticing] = useState(false);
+  const [practicePicker, setPracticePicker] = useState(false);
+  const [practiceFolderId, setPracticeFolderId] = useState('');
 
   const dueWords = useMemo(() => words.filter(item => item.nextReviewAt && new Date(item.nextReviewAt).getTime() <= Date.now()).length, [words]);
   const reviewedWords = useMemo(() => words.filter(item => item.reviewCount > 0).length, [words]);
 
   const filteredWords = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return words;
-    return words.filter(item =>
+    const folderWords = activeFolderId === 'unfiled' ? words.filter(item => !item.folderId) : activeFolderId ? words.filter(item => item.folderId === activeFolderId) : words;
+    if (!keyword) return folderWords;
+    return folderWords.filter(item =>
       item.word.toLowerCase().includes(keyword) ||
       item.meaning.toLowerCase().includes(keyword) ||
       item.note.toLowerCase().includes(keyword)
     );
-  }, [words, query]);
+  }, [words, query, activeFolderId]);
 
   const loadWords = async () => {
     if (!isSupabaseConfigured) return;
     setLoading(true);
     try {
-      setWords(await fetchVocaWords());
+      const [loadedWords, loadedFolders] = await Promise.all([fetchVocaWords(), fetchVocaFolders()]);
+      setWords(loadedWords);
+      setFolders(loadedFolders);
     } catch (error) {
       console.error(error);
       setMessage(text.loadError);
@@ -169,7 +177,7 @@ const VocaDashboard: React.FC = () => {
     setSaving(true);
     setMessage('');
     try {
-      const saved = await saveVocaWord(draft);
+      const saved = await saveVocaWord({ ...draft, folderId: draft.folderId || (activeFolderId && activeFolderId !== 'unfiled' ? activeFolderId : '') });
       setWords(prev => [saved, ...prev.filter(item => item.id !== saved.id)]);
       setDraft(emptyDraft);
       setMessage(text.saved);
@@ -198,6 +206,30 @@ const VocaDashboard: React.FC = () => {
     }
   };
 
+  const addFolder = async () => {
+    if (!folderName.trim()) return;
+    try {
+      const folder = await createVocaFolder(folderName);
+      setFolders(previous => [folder, ...previous]);
+      setFolderName('');
+      setActiveFolderId(folder.id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Không thể tạo thư mục.');
+    }
+  };
+
+  const removeFolder = async (folder: VocaFolder) => {
+    if (!confirm(`Xóa thư mục "${folder.name}"? Các từ bên trong sẽ chuyển sang Chưa phân thư mục.`)) return;
+    try {
+      await deleteVocaFolder(folder.id);
+      setFolders(previous => previous.filter(item => item.id !== folder.id));
+      setWords(previous => previous.map(item => item.folderId === folder.id ? { ...item, folderId: '' } : item));
+      if (activeFolderId === folder.id) setActiveFolderId('');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Không thể xóa thư mục.');
+    }
+  };
+
   const importVocabularyImage = async (file: File) => {
     setImageImporting(true);
     setMessage('');
@@ -205,7 +237,7 @@ const VocaDashboard: React.FC = () => {
       const extracted = await extractVocabularyFromImage(file);
       const existing = new Set(words.map(item => item.word.trim().toLowerCase()));
       const unique = extracted.filter(item => !existing.has(item.word.toLowerCase()));
-      const saved = await Promise.all(unique.map(item => saveVocaWord({ ...item, note: 'Nhập từ ảnh' })));
+      const saved = await Promise.all(unique.map(item => saveVocaWord({ ...item, folderId: activeFolderId && activeFolderId !== 'unfiled' ? activeFolderId : '' })));
       setWords(previous => [...saved, ...previous]);
       setMessage(unique.length ? `Đã thêm ${unique.length} từ từ ảnh.${extracted.length > unique.length ? ` Bỏ qua ${extracted.length - unique.length} từ trùng.` : ''}` : 'Không tìm thấy từ mới trong ảnh.');
     } catch (error) {
@@ -240,7 +272,8 @@ const VocaDashboard: React.FC = () => {
   };
 
   if (practicing) {
-    return <VocaPractice words={words} onClose={() => setPracticing(false)} onReviewed={saved => setWords(prev => prev.map(item => item.id === saved.id ? saved : item))} />;
+    const practiceWords = practiceFolderId ? words.filter(item => item.folderId === practiceFolderId) : words;
+    return <VocaPractice words={practiceWords} onClose={() => setPracticing(false)} onReviewed={saved => setWords(prev => prev.map(item => item.id === saved.id ? saved : item))} />;
   }
 
   return (
@@ -253,7 +286,7 @@ const VocaDashboard: React.FC = () => {
             <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-slate-300">{text.heroDesc}</p>
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) importVocabularyImage(file); }} />
             <div className="mt-5 flex flex-wrap gap-3">
-              <button onClick={() => setPracticing(true)} disabled={words.length === 0} className="inline-flex items-center gap-2 bg-cyan-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"><i className="fa-solid fa-graduation-cap" />{text.practiceToday}</button>
+              <button onClick={() => setPracticePicker(true)} disabled={words.length === 0} className="inline-flex items-center gap-2 bg-cyan-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"><i className="fa-solid fa-graduation-cap" />{text.practiceToday}</button>
               <button onClick={() => imageInputRef.current?.click()} disabled={imageImporting} className="inline-flex items-center gap-2 border border-white/30 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/20 disabled:opacity-50"><i className={`fa-solid ${imageImporting ? 'fa-spinner animate-spin' : 'fa-image'}`} />{imageImporting ? 'AI đang đọc ảnh...' : 'Nhập từ từ ảnh'}</button>
               <button onClick={importVocabularyClipboard} disabled={imageImporting} className="inline-flex items-center gap-2 border border-white/30 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/20 disabled:opacity-50"><i className="fa-solid fa-paste" />Dán ảnh</button>
             </div>
@@ -265,6 +298,14 @@ const VocaDashboard: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {practicePicker && <section className="border border-cyan-200 bg-cyan-50 p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3"><span className="text-sm font-black text-slate-800">Chọn phạm vi luyện tập:</span>
+          <button onClick={() => { setPracticeFolderId(''); setPracticePicker(false); setPracticing(true); }} className="bg-slate-950 px-4 py-2 text-xs font-black text-white">Tất cả từ</button>
+          {folders.map(folder => <button key={folder.id} onClick={() => { setPracticeFolderId(folder.id); setPracticePicker(false); setPracticing(true); }} className="border border-cyan-300 bg-white px-4 py-2 text-xs font-black text-blue-700"><i className="fa-solid fa-folder mr-2" />{folder.name} ({words.filter(word => word.folderId === folder.id).length})</button>)}
+          <button onClick={() => setPracticePicker(false)} className="ml-auto text-xs font-black text-slate-500">Hủy</button>
+        </div>
+      </section>}
 
       <section className="grid gap-5 xl:grid-cols-[420px_1fr]">
         <div className="border border-slate-200 bg-white p-5 shadow-[0_12px_40px_rgba(15,23,42,0.06)]">
@@ -285,6 +326,7 @@ const VocaDashboard: React.FC = () => {
             <input value={draft.ipa || ''} onChange={event => updateDraft('ipa', event.target.value)} placeholder={text.ipaPlaceholder} className="w-full border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-400" />
             <textarea value={draft.meaning || ''} onChange={event => updateDraft('meaning', event.target.value)} placeholder={text.meaningPlaceholder} rows={3} className="w-full resize-none border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-400" />
             <textarea value={draft.example || ''} onChange={event => updateDraft('example', event.target.value)} placeholder={text.examplePlaceholder} rows={3} className="w-full resize-none border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-400" />
+            <select value={draft.folderId || (activeFolderId !== 'unfiled' ? activeFolderId : '')} onChange={event => updateDraft('folderId', event.target.value)} className="w-full border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-400"><option value="">Chưa phân thư mục</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>
             <textarea value={draft.note || ''} onChange={event => updateDraft('note', event.target.value)} placeholder={text.notePlaceholder} rows={2} className="w-full resize-none border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-400" />
           </div>
 
@@ -305,31 +347,37 @@ const VocaDashboard: React.FC = () => {
             </div>
             <input value={query} onChange={event => setQuery(event.target.value)} placeholder={text.searchPlaceholder} className="border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold outline-none focus:border-blue-400 sm:w-72" />
           </div>
+          <div className="flex flex-wrap items-center gap-2 border border-slate-200 bg-white p-3">
+            <select value={activeFolderId} onChange={event => setActiveFolderId(event.target.value)} className="border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black outline-none"><option value="">Tất cả thư mục</option><option value="unfiled">Chưa phân thư mục</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>
+            <input value={folderName} onChange={event => setFolderName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') addFolder(); }} placeholder="Tên thư mục mới" className="min-w-0 flex-1 border border-slate-200 px-3 py-2 text-xs font-bold outline-none focus:border-blue-400" />
+            <button onClick={addFolder} disabled={!folderName.trim()} className="bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-50"><i className="fa-solid fa-folder-plus mr-1" />Tạo</button>
+            {activeFolderId && activeFolderId !== 'unfiled' && <button onClick={() => { const folder = folders.find(item => item.id === activeFolderId); if (folder) removeFolder(folder); }} className="px-2 py-2 text-xs text-rose-600"><i className="fa-solid fa-trash" /></button>}
+          </div>
 
           {loading ? (
             <div className="border border-slate-200 bg-white p-8 text-center font-black text-slate-400 shadow-[0_12px_40px_rgba(15,23,42,0.06)]">{text.loading}</div>
           ) : filteredWords.length === 0 ? (
             <div className="border border-dashed border-slate-300 bg-white/80 p-8 text-center font-bold text-slate-400">{text.emptyList}</div>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
               {filteredWords.map(item => (
-                <article key={item.id} className="border border-slate-200 bg-white p-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_18px_45px_rgba(37,99,235,0.12)]">
+                <article key={item.id} className="border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-200">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h4 className="text-xl font-black text-slate-950">{item.word}</h4>
-                      {item.ipa && <p className="mt-1 font-mono text-sm font-bold text-blue-600">{item.ipa}</p>}
+                      <h4 className="text-lg font-black text-slate-950">{item.word}</h4>
+                      {item.ipa && <p className="font-mono text-xs font-bold text-blue-600">{item.ipa}</p>}
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
-                      <button onClick={() => speakWord(item.word, 'US', setMessage)} title={text.usTitle} className="grid h-9 min-w-9 place-items-center bg-blue-50 px-2 text-xs font-black text-blue-600"><span><i className="fa-solid fa-volume-high mr-1" />US</span></button>
-                      <button onClick={() => speakWord(item.word, 'UK', setMessage)} title={text.ukTitle} className="grid h-9 min-w-9 place-items-center bg-violet-50 px-2 text-xs font-black text-violet-600"><span><i className="fa-solid fa-volume-high mr-1" />UK</span></button>
-                      <button onClick={() => editWord(item)} className="grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i className="fa-solid fa-pen" /></button>
-                      <button onClick={() => removeWord(item.id)} className="grid h-9 w-9 place-items-center bg-rose-50 text-rose-600"><i className="fa-solid fa-trash" /></button>
+                      <button onClick={() => speakWord(item.word, 'US', setMessage)} title={text.usTitle} className="grid h-7 min-w-7 place-items-center bg-blue-50 px-1 text-[10px] font-black text-blue-600"><span><i className="fa-solid fa-volume-high mr-1" />US</span></button>
+                      <button onClick={() => speakWord(item.word, 'UK', setMessage)} title={text.ukTitle} className="grid h-7 min-w-7 place-items-center bg-violet-50 px-1 text-[10px] font-black text-violet-600"><span><i className="fa-solid fa-volume-high mr-1" />UK</span></button>
+                      <button onClick={() => editWord(item)} className="grid h-7 w-7 place-items-center bg-slate-100 text-xs text-slate-600"><i className="fa-solid fa-pen" /></button>
+                      <button onClick={() => removeWord(item.id)} className="grid h-7 w-7 place-items-center bg-rose-50 text-xs text-rose-600"><i className="fa-solid fa-trash" /></button>
                     </div>
                   </div>
-                  <p className="mt-4 whitespace-pre-line border-t border-slate-100 pt-4 text-sm font-bold leading-6 text-slate-700">{item.meaning || text.noMeaning}</p>
-                  {item.example && <p className="mt-3 bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-500">{item.example}</p>}
-                  {item.note && <p className="mt-3 text-xs font-bold text-amber-600"><i className="fa-solid fa-note-sticky mr-2" />{item.note}</p>}
-                  <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 text-center">
+                  <p className="mt-3 whitespace-pre-line border-t border-slate-100 pt-3 text-sm font-bold leading-5 text-slate-700">{item.meaning || text.noMeaning}</p>
+                  {item.example && <p className="mt-2 line-clamp-2 bg-slate-50 p-2 text-xs font-semibold leading-5 text-slate-500">{item.example}</p>}
+                  {item.note && item.note !== 'Nhập từ ảnh' && <p className="mt-2 text-xs font-bold text-amber-600"><i className="fa-solid fa-note-sticky mr-1" />{item.note}</p>}
+                  <div className="mt-3 grid grid-cols-3 gap-1 border-t border-slate-100 pt-3 text-center">
                     <div className="rounded-lg bg-slate-50 px-2 py-2"><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Đã ôn</p><p className="mt-1 text-sm font-black text-slate-800">{item.reviewCount || 0} lần</p></div>
                     <div className="rounded-lg bg-slate-50 px-2 py-2"><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Ôn gần nhất</p><p className="mt-1 text-xs font-black text-slate-800">{formatReviewDate(item.lastReviewedAt)}</p></div>
                     <div className={`rounded-lg px-2 py-2 ${item.nextReviewAt && new Date(item.nextReviewAt).getTime() <= Date.now() ? 'bg-amber-100' : 'bg-cyan-50'}`}><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Ôn tiếp</p><p className="mt-1 text-xs font-black text-slate-800">{formatReviewDate(item.nextReviewAt)}</p></div>
