@@ -5,9 +5,10 @@ import { resolveMatchingPairs } from '../services/openaiService';
 interface QuizContainerProps {
   list: ExerciseItem[];
   onExit: () => void;
+  onComplete?: (score: number, total: number) => void;
 }
 
-const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
+const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit, onComplete }) => {
   const [state, setState] = useState<QuizState>({
     currentIndex: 0,
     score: 0,
@@ -23,6 +24,7 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
   const [resolvedMatchingPairs, setResolvedMatchingPairs] = useState<Record<string, string>>({});
   const [resolvingMatching, setResolvingMatching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const completionReported = useRef(false);
 
   const currentItem = list[state.currentIndex];
 
@@ -48,6 +50,13 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
 
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [state.currentIndex, currentItem]);
+
+  useEffect(() => {
+    if (state.isFinished && !completionReported.current) {
+      completionReported.current = true;
+      onComplete?.(state.score, list.length);
+    }
+  }, [state.isFinished, state.score, list.length, onComplete]);
 
   useEffect(() => {
     if (!currentItem || currentItem.type !== 'MATCHING') return;

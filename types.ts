@@ -23,6 +23,13 @@ export interface VocabList {
   folderId?: string;
 }
 
+export interface ExerciseProgress {
+  listId: string;
+  completedAt: string;
+  score: number;
+  total: number;
+}
+
 export interface ExerciseFolder {
   id: string;
   name: string;

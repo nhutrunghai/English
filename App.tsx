@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AppMode, ExerciseFolder, ExerciseItem, VocabList } from './types';
+import { AppMode, ExerciseFolder, ExerciseItem, ExerciseProgress, VocabList } from './types';
 import Header from './components/Header';
 import ImageUploader from './components/ImageUploader';
 import ImageCropper from './components/ImageCropper';
@@ -14,7 +14,7 @@ import VocaDashboard from './components/VocaDashboard';
 import NoteDashboard from './components/NoteDashboard';
 import AuthGate from './components/AuthGate';
 import { extractExercisesFromImage, extractExercisesFromPdf, fetchOpenAiUsageSummary, OpenAiUsageSummary } from './services/openaiService';
-import { createExerciseFolder, deleteExerciseFolder, deleteVocabularyList, fetchExerciseFolders, fetchNotes, fetchPomodoroSessions, fetchStreakTasks, fetchVocaWords, fetchVocabulary, isSupabaseConfigured, moveVocabularyListToFolder, renameVocabularyList, savePomodoroSession, saveStreakTask, saveVocabularyList, supabase } from './services/supabaseService';
+import { createExerciseFolder, deleteExerciseFolder, deleteVocabularyList, fetchExerciseFolders, fetchExerciseProgress, fetchNotes, fetchPomodoroSessions, fetchStreakTasks, fetchVocaWords, fetchVocabulary, isSupabaseConfigured, moveVocabularyListToFolder, renameVocabularyList, saveExerciseProgress, savePomodoroSession, saveStreakTask, saveVocabularyList, supabase } from './services/supabaseService';
 import { StreakTask } from './services/streakTypes';
 
 const getModeTitle = (mode: AppMode) => {
@@ -78,6 +78,7 @@ const App: React.FC = () => {
   });
   const [streakRefreshKey, setStreakRefreshKey] = useState(0);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [exerciseProgress, setExerciseProgress] = useState<Record<string, ExerciseProgress>>({});
   const [exerciseFolders, setExerciseFolders] = useState<ExerciseFolder[]>([]);
   const [folderName, setFolderName] = useState('');
   const [draggedListId, setDraggedListId] = useState<string | null>(null);
@@ -137,13 +138,14 @@ const App: React.FC = () => {
       const data = await fetchVocabulary();
       setRawHistory(data || []);
 
-      const [vocaResult, noteResult, pomodoroResult, streakResult, foldersResult, usageResult] = await Promise.allSettled([
+      const [vocaResult, noteResult, pomodoroResult, streakResult, foldersResult, usageResult, progressResult] = await Promise.allSettled([
         fetchVocaWords(),
         fetchNotes(),
         fetchPomodoroSessions(),
         fetchStreakTasks(),
         fetchExerciseFolders(),
         fetchOpenAiUsageSummary(),
+        fetchExerciseProgress(),
       ]);
 
       const vocaWords = vocaResult.status === 'fulfilled' ? vocaResult.value : [];
@@ -157,6 +159,7 @@ const App: React.FC = () => {
       } else {
         setAiUsageError('Chưa tải được thống kê GPT.');
       }
+      if (progressResult.status === 'fulfilled') setExerciseProgress(Object.fromEntries(progressResult.value.map(item => [item.listId, item])));
       setDashboardStats({
         vocaWords: vocaWords.length,
         notes: notes.length,
@@ -463,6 +466,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleExerciseComplete = async (score: number, total: number) => {
+    const listId = activeList[0]?.listId;
+    if (!listId) return;
+    try {
+      const progress = await saveExerciseProgress(listId, score, total);
+      setExerciseProgress(previous => ({ ...previous, [listId]: progress }));
+    } catch (error) {
+      console.error('Could not save exercise progress', error);
+    }
+  };
+
   if (!authChecked) {
     return (
       <div className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_32rem),linear-gradient(135deg,#f8fafc,#eef2ff)] text-slate-950">
@@ -525,6 +539,7 @@ const App: React.FC = () => {
           </form>
         ) : <p className="truncate text-sm font-black text-slate-900">{list.name}</p>}
         <p className="mt-0.5 truncate text-[11px] font-bold text-slate-400">{list.date} · {list.items.length} câu hỏi · {Array.from(new Set(list.items.map(item => item.type))).join(', ')}</p>
+        {exerciseProgress[list.id] && <p className="mt-1 text-[11px] font-black text-emerald-600"><i className="fa-solid fa-circle-check mr-1" />Đã hoàn thành · {exerciseProgress[list.id].score}/{exerciseProgress[list.id].total}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <button onClick={() => { setEditingListId(list.id); setEditingListName(list.name); }} title="Đổi tên" className="grid h-8 w-8 place-items-center text-slate-400 hover:text-blue-600"><i className="fa-solid fa-pen" /></button>
@@ -667,7 +682,7 @@ const App: React.FC = () => {
           )}
 
           {mode === AppMode.EDITOR && <VocabEditor initialList={tempList} onSave={handleEditorComplete} onCancel={() => setMode(AppMode.HOME)} />}
-          {mode === AppMode.QUIZ && <QuizContainer list={activeList} onExit={() => setMode(AppMode.HOME)} />}
+          {mode === AppMode.QUIZ && <QuizContainer list={activeList} onExit={() => setMode(AppMode.HOME)} onComplete={handleExerciseComplete} />}
           {mode === AppMode.PRONUNCIATION && <PronunciationMode list={activeList} onNext={() => setMode(AppMode.QUIZ)} />}
           {mode === AppMode.STREAK && <StreakDashboard activeTaskId={activeStreakTask?.id || null} pomodoroRunning={pomodoroRunning} refreshKey={streakRefreshKey} onStartTask={startStreakTaskPomodoro} onCompleteActiveTask={() => completeStreakTask()} />}
           {mode === AppMode.VOCA && <VocaDashboard />}

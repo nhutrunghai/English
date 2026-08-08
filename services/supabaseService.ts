@@ -1,5 +1,5 @@
 ﻿import { createClient } from '@supabase/supabase-js';
-import { ExerciseFolder, ExerciseItem, NoteItem, PomodoroSession, VocaFolder, VocaWord } from '../types';
+import { ExerciseFolder, ExerciseItem, ExerciseProgress, NoteItem, PomodoroSession, VocaFolder, VocaWord } from '../types';
 import { StreakDayNote, StreakTask } from './streakTypes';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -261,6 +261,20 @@ export const renameVocabularyList = async (listId: string, name: string): Promis
 
   if (error) throw error;
   return true;
+};
+
+export const fetchExerciseProgress = async (): Promise<ExerciseProgress[]> => {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from('exercise_progress').select('*').eq('owner_id', await ownerId());
+  if (error) throw error;
+  return (data || []).map((row: any) => ({ listId: String(row.list_id), completedAt: String(row.completed_at), score: Number(row.score || 0), total: Number(row.total || 0) }));
+};
+
+export const saveExerciseProgress = async (listId: string, score: number, total: number): Promise<ExerciseProgress> => {
+  if (!supabase) throw new Error('Supabase is not configured');
+  const { data, error } = await supabase.from('exercise_progress').upsert({ owner_id: await ownerId(), list_id: listId, completed_at: new Date().toISOString(), score, total }, { onConflict: 'owner_id,list_id' }).select('*').single();
+  if (error) throw error;
+  return { listId: String(data.list_id), completedAt: String(data.completed_at), score: Number(data.score || 0), total: Number(data.total || 0) };
 };
 
 export const fetchExerciseFolders = async (): Promise<ExerciseFolder[]> => {
