@@ -76,7 +76,12 @@ export const extractVocabularyFromImage = async (file: File): Promise<Array<Pick
   if (!file.type.startsWith('image/')) throw new Error('Vui lòng chọn một file ảnh.');
   const content = await readFileAsDataUrl(file);
   const data = await invokeOpenAI({ action: 'extract_vocabulary', content, filename: file.name });
-  const parsed = JSON.parse(cleanJson(String(data.outputText || '[]')));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleanJson(String(data.outputText || '[]')));
+  } catch {
+    throw new Error('AI trả về danh sách từ chưa hoàn chỉnh. Hãy thử lại ảnh này hoặc cắt ảnh thành phần nhỏ hơn.');
+  }
   if (!Array.isArray(parsed)) return [];
   return parsed.map((item: any) => ({
     word: String(item.word || '').trim(),

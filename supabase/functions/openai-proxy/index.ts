@@ -49,7 +49,7 @@ const matchingResolverPrompt = (data: { question: string; options: string[]; ins
 Left-side items: "${data.question}". Right-side options: ${JSON.stringify(data.options)}. Vietnamese instruction: "${data.instruction}".
 Infer the intended relation from the items and instruction. Do not omit options.`;
 
-const imageVocabularyPrompt = `Read this vocabulary image carefully. Return ONLY a valid JSON array, with no markdown. Extract every distinct English vocabulary word or phrase that is clearly intended for study. Keep the English exactly as shown where possible. Use Vietnamese meaning shown in the image; if it is missing, provide a concise accurate Vietnamese translation. Include IPA and a short example only when they are clearly visible or reliable. Do not include headings, page numbers, instructions, duplicates, or long explanatory sentences.
+const imageVocabularyPrompt = `Read this vocabulary image carefully. Return ONLY a valid JSON array, with no markdown. Extract up to 50 distinct English vocabulary words or phrases that are clearly intended for study. Keep the English exactly as shown where possible. Use Vietnamese meaning shown in the image; if it is missing, provide a concise accurate Vietnamese translation. Include IPA and a short example only when they are clearly visible or reliable. Do not include headings, page numbers, instructions, duplicates, or long explanatory sentences.
 Format: [{"word":"English word or phrase","meaning":"nghĩa tiếng Việt","ipa":"/ipa/ or empty string","example":"short example or empty string"}].`;
 
 const sumCosts = (payload: any) => (payload?.data || []).flatMap((bucket: any) => bucket.results || []).reduce((sum: number, item: any) => sum + Number(item?.amount?.value || 0), 0);
@@ -144,7 +144,7 @@ Deno.serve(async (request) => {
     const response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, temperature: 0.1, max_output_tokens: body.action === 'extract_exercises' ? 6000 : 500, input }),
+      body: JSON.stringify({ model, temperature: 0.1, max_output_tokens: body.action === 'extract_exercises' ? 6000 : body.action === 'extract_vocabulary' ? 4000 : 500, input }),
     });
     if (!response.ok) return json({ ok: false, error: `OpenAI API error: ${await response.text()}` }, response.status);
     const responsePayload = await response.json();
