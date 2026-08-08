@@ -400,12 +400,13 @@ const App: React.FC = () => {
       const listId = `list_${Date.now()}`;
       const listName = `Bài tập lúc ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
       const exercisesWithImages = await Promise.all(extracted.map(async item => {
-        let imageB64 = item.imageB64 || base64;
+        let imageB64 = item.imageB64 || '';
         if (item.imageRegion) {
           try {
             imageB64 = await cropExerciseImage(base64, item.imageRegion);
           } catch {
-            // Keep the original image if a crop cannot be created, so no question loses its visual context.
+            // Preserve visual context even if the browser cannot crop the source image.
+            imageB64 = base64;
           }
         }
         return { ...item, listId, listName, imageB64 };
