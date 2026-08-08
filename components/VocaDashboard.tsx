@@ -64,6 +64,8 @@ const formatReviewDate = (value?: string) => {
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
 };
 
+const ACTIVE_VOCA_FOLDER_KEY = 'lingosnap_active_voca_folder';
+
 const speakWord = (word: string, accent: Accent, onError: (message: string) => void) => {
   const cleanWord = word.trim();
   if (!cleanWord) {
@@ -91,7 +93,7 @@ const speakWord = (word: string, accent: Accent, onError: (message: string) => v
 const VocaDashboard: React.FC = () => {
   const [words, setWords] = useState<VocaWord[]>([]);
   const [folders, setFolders] = useState<VocaFolder[]>([]);
-  const [activeFolderId, setActiveFolderId] = useState('');
+  const [activeFolderId, setActiveFolderId] = useState(() => localStorage.getItem(ACTIVE_VOCA_FOLDER_KEY) || '');
   const [folderName, setFolderName] = useState('');
   const [draft, setDraft] = useState(emptyDraft);
   const [query, setQuery] = useState('');
@@ -111,6 +113,8 @@ const VocaDashboard: React.FC = () => {
 
   const dueWords = useMemo(() => words.filter(item => item.nextReviewAt && new Date(item.nextReviewAt).getTime() <= Date.now()).length, [words]);
   const reviewedWords = useMemo(() => words.filter(item => item.reviewCount > 0).length, [words]);
+
+  useEffect(() => { localStorage.setItem(ACTIVE_VOCA_FOLDER_KEY, activeFolderId); }, [activeFolderId]);
 
   const filteredWords = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -307,7 +311,7 @@ const VocaDashboard: React.FC = () => {
   };
 
   if (practicing) {
-    const practiceWords = practiceFolderId ? words.filter(item => item.folderId === practiceFolderId) : words;
+    const practiceWords = practiceFolderId === 'unfiled' ? words.filter(item => !item.folderId) : practiceFolderId ? words.filter(item => item.folderId === practiceFolderId) : words;
     return <VocaPractice words={practiceWords} onClose={() => setPracticing(false)} onReviewed={saved => setWords(prev => prev.map(item => item.id === saved.id ? saved : item))} />;
   }
 
@@ -321,7 +325,7 @@ const VocaDashboard: React.FC = () => {
             <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-slate-300">{text.heroDesc}</p>
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) importVocabularyImage(file); }} />
             <div className="mt-5 flex flex-wrap gap-3">
-              <button onClick={() => setPracticePicker(true)} disabled={words.length === 0} className="inline-flex items-center gap-2 bg-cyan-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"><i className="fa-solid fa-graduation-cap" />{text.practiceToday}</button>
+              <button onClick={() => { if (activeFolderId) { setPracticeFolderId(activeFolderId); setPracticing(true); } else setPracticePicker(true); }} disabled={words.length === 0} className="inline-flex items-center gap-2 bg-cyan-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"><i className="fa-solid fa-graduation-cap" />{text.practiceToday}</button>
               <button onClick={() => imageInputRef.current?.click()} disabled={imageImporting} className="inline-flex items-center gap-2 border border-white/30 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/20 disabled:opacity-50"><i className={`fa-solid ${imageImporting ? 'fa-spinner animate-spin' : 'fa-image'}`} />{imageImporting ? 'AI đang đọc ảnh...' : 'Nhập từ từ ảnh'}</button>
               <button onClick={importVocabularyClipboard} disabled={imageImporting} className="inline-flex items-center gap-2 border border-white/30 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/20 disabled:opacity-50"><i className="fa-solid fa-paste" />Dán ảnh</button>
             </div>
