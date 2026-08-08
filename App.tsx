@@ -452,6 +452,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSignOut = async () => {
+    if (!supabase) return;
+    try {
+      await supabase.auth.signOut();
+      setSignedIn(false);
+      setMode(AppMode.HOME);
+    } catch (error) {
+      alert(error instanceof Error ? `Không thể đăng xuất: ${error.message}` : 'Không thể đăng xuất.');
+    }
+  };
+
   if (!authChecked) {
     return (
       <div className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_32rem),linear-gradient(135deg,#f8fafc,#eef2ff)] text-slate-950">
@@ -550,7 +561,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_32rem),linear-gradient(135deg,#f8fafc,#eef2ff)] text-slate-950">
-      <Header mode={mode} onNavigate={setMode} onSync={initData} syncing={syncing} />
+      <Header mode={mode} onNavigate={setMode} onSync={initData} onSignOut={handleSignOut} syncing={syncing} />
 
       {saveStatus !== 'idle' && (
         <div className={`fixed right-4 top-5 z-[80] rounded-xl px-4 py-2.5 font-black text-white shadow-2xl ${saveStatus === 'saving' ? 'bg-orange-500' : saveStatus === 'success' ? 'bg-emerald-600' : 'bg-red-600'}`}>

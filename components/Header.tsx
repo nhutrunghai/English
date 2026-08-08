@@ -5,6 +5,7 @@ interface HeaderProps {
   mode: AppMode;
   onNavigate: (mode: AppMode) => void;
   onSync: () => void;
+  onSignOut: () => void;
   syncing: boolean;
 }
 
@@ -17,7 +18,7 @@ const navItems = [
   { mode: AppMode.STREAK, label: 'Streak', icon: 'fa-table-list' },
 ];
 
-const Header: React.FC<HeaderProps> = ({ mode, onNavigate, onSync, syncing }) => {
+const Header: React.FC<HeaderProps> = ({ mode, onNavigate, onSync, onSignOut, syncing }) => {
   return (
     <aside className="fixed inset-y-0 left-0 z-50 w-[68px] border-r border-white/70 bg-white/85 shadow-[20px_0_60px_rgba(15,23,42,0.06)] backdrop-blur-2xl lg:w-56">
       <div className="flex h-full flex-col px-3 py-2.5 lg:px-3 lg:py-6">
@@ -57,6 +58,14 @@ const Header: React.FC<HeaderProps> = ({ mode, onNavigate, onSync, syncing }) =>
           >
             <i className={`fa-solid fa-arrows-rotate text-lg lg:w-5 ${syncing ? 'animate-spin' : ''}`} />
             <span className="hidden lg:inline">{'\u0110\u1ed3ng b\u1ed9'}</span>
+          </button>
+          <button
+            onClick={onSignOut}
+            title="Đăng xuất"
+            className="flex w-full items-center justify-center gap-3 rounded-xl px-0 py-2.5 text-sm font-black text-rose-500 transition hover:bg-rose-50 lg:justify-start lg:px-3"
+          >
+            <i className="fa-solid fa-right-from-bracket text-lg lg:w-5" />
+            <span className="hidden lg:inline">Đăng xuất</span>
           </button>
         </div>
       </div>
