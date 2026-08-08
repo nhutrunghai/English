@@ -404,6 +404,13 @@ export const deleteVocaFolder = async (id: string): Promise<boolean> => {
   return true;
 };
 
+export const moveVocaWordsToFolder = async (ids: string[], folderId: string | null): Promise<boolean> => {
+  if (!supabase || !ids.length) return false;
+  const { error } = await supabase.from('voca_words').update({ folder_id: folderId }).eq('owner_id', await ownerId()).in('id', ids);
+  if (error) throw error;
+  return true;
+};
+
 export const saveVocaReview = async (word: VocaWord): Promise<VocaWord> => {
   if (!supabase) throw new Error('Supabase is not configured');
 

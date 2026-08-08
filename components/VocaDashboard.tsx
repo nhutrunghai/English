@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { VocaFolder, VocaWord } from '../types';
 import { enrichVocabularyWord, extractVocabularyFromImage } from '../services/openaiService';
-import { createVocaFolder, deleteVocaFolder, deleteVocaWord, fetchVocaFolders, fetchVocaWords, isSupabaseConfigured, saveVocaWord } from '../services/supabaseService';
+import { createVocaFolder, deleteVocaFolder, deleteVocaWord, fetchVocaFolders, fetchVocaWords, isSupabaseConfigured, moveVocaWordsToFolder, saveVocaWord } from '../services/supabaseService';
 import VocaPractice from './VocaPractice';
 
 const text = {
@@ -104,6 +104,10 @@ const VocaDashboard: React.FC = () => {
   const [practicing, setPracticing] = useState(false);
   const [practicePicker, setPracticePicker] = useState(false);
   const [practiceFolderId, setPracticeFolderId] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedWordIds, setSelectedWordIds] = useState<Set<string>>(new Set());
+  const [moveTargetId, setMoveTargetId] = useState('');
+  const [draggedWordId, setDraggedWordId] = useState<string | null>(null);
 
   const dueWords = useMemo(() => words.filter(item => item.nextReviewAt && new Date(item.nextReviewAt).getTime() <= Date.now()).length, [words]);
   const reviewedWords = useMemo(() => words.filter(item => item.reviewCount > 0).length, [words]);
@@ -230,6 +234,37 @@ const VocaDashboard: React.FC = () => {
     }
   };
 
+  const toggleWordSelection = (id: string) => setSelectedWordIds(previous => {
+    const next = new Set(previous);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const moveWords = async (ids: string[], targetId = moveTargetId) => {
+    if (!ids.length || !targetId) return;
+    const folderId = targetId === 'unfiled' ? null : targetId;
+    try {
+      await moveVocaWordsToFolder(ids, folderId);
+      setWords(previous => previous.map(word => ids.includes(word.id) ? { ...word, folderId: folderId || '' } : word));
+      setSelectedWordIds(new Set());
+      setDraggedWordId(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Không thể chuyển từ vựng.');
+    }
+  };
+
+  const deleteSelectedWords = async () => {
+    const ids = Array.from(selectedWordIds);
+    if (!ids.length || !confirm(`Xóa ${ids.length} từ đã chọn?`)) return;
+    try {
+      await Promise.all(ids.map(deleteVocaWord));
+      setWords(previous => previous.filter(word => !selectedWordIds.has(word.id)));
+      setSelectedWordIds(new Set());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Không thể xóa các từ đã chọn.');
+    }
+  };
+
   const importVocabularyImage = async (file: File) => {
     setImageImporting(true);
     setMessage('');
@@ -353,6 +388,15 @@ const VocaDashboard: React.FC = () => {
             <button onClick={addFolder} disabled={!folderName.trim()} className="bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-50"><i className="fa-solid fa-folder-plus mr-1" />Tạo</button>
             {activeFolderId && activeFolderId !== 'unfiled' && <button onClick={() => { const folder = folders.find(item => item.id === activeFolderId); if (folder) removeFolder(folder); }} className="px-2 py-2 text-xs text-rose-600"><i className="fa-solid fa-trash" /></button>}
           </div>
+          <div className="flex flex-wrap items-center gap-2 border border-slate-200 bg-slate-50 p-3">
+            <button onClick={() => { setSelectionMode(value => !value); setSelectedWordIds(new Set()); }} className={`px-3 py-2 text-xs font-black ${selectionMode ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white text-slate-700'}`}><i className="fa-solid fa-check-double mr-1" />{selectionMode ? 'Hủy chọn' : 'Chế độ chọn'}</button>
+            <span className="text-xs font-bold text-slate-500">{selectionMode ? `Đã chọn ${selectedWordIds.size} từ` : 'Chọn thư mục nguồn ở ô phía trên, rồi chọn hoặc kéo từ sang thư mục đích.'}</span>
+            <div onDragOver={event => event.preventDefault()} onDrop={() => { if (draggedWordId) moveWords([draggedWordId]); }} className="ml-auto flex flex-wrap items-center gap-2 border border-dashed border-blue-300 bg-white px-2 py-1">
+              <select value={moveTargetId} onChange={event => setMoveTargetId(event.target.value)} className="bg-transparent px-2 py-1.5 text-xs font-black outline-none"><option value="">Chọn thư mục đích</option><option value="unfiled">Chưa phân thư mục</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>
+              {selectionMode && <button onClick={() => moveWords(Array.from(selectedWordIds))} disabled={!selectedWordIds.size || !moveTargetId} className="bg-blue-600 px-3 py-1.5 text-xs font-black text-white disabled:opacity-50">Chuyển</button>}
+              {selectionMode && <button onClick={deleteSelectedWords} disabled={!selectedWordIds.size} className="px-2 py-1.5 text-xs font-black text-rose-600 disabled:opacity-50"><i className="fa-solid fa-trash" /></button>}
+            </div>
+          </div>
 
           {loading ? (
             <div className="border border-slate-200 bg-white p-8 text-center font-black text-slate-400 shadow-[0_12px_40px_rgba(15,23,42,0.06)]">{text.loading}</div>
@@ -361,8 +405,8 @@ const VocaDashboard: React.FC = () => {
           ) : (
             <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
               {filteredWords.map(item => (
-                <article key={item.id} className="border border-slate-200 bg-white p-3 shadow-sm transition hover:border-blue-200">
-                  <div className="flex items-start justify-between gap-3">
+                <article key={item.id} draggable={!selectionMode} onDragStart={() => setDraggedWordId(item.id)} onDragEnd={() => setDraggedWordId(null)} onClick={() => { if (selectionMode) toggleWordSelection(item.id); }} className={`border bg-white p-3 shadow-sm transition hover:border-blue-200 ${selectionMode ? 'cursor-pointer' : 'cursor-grab'} ${selectedWordIds.has(item.id) ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-slate-200'}`}>
+                  <div onClick={event => event.stopPropagation()} className="flex items-start justify-between gap-3">
                     <div>
                       <h4 className="text-lg font-black text-slate-950">{item.word}</h4>
                       {item.ipa && <p className="font-mono text-xs font-bold text-blue-600">{item.ipa}</p>}
@@ -375,7 +419,7 @@ const VocaDashboard: React.FC = () => {
                     </div>
                   </div>
                   <p className="mt-3 whitespace-pre-line border-t border-slate-100 pt-3 text-sm font-bold leading-5 text-slate-700">{item.meaning || text.noMeaning}</p>
-                  {item.example && <p className="mt-2 line-clamp-2 bg-slate-50 p-2 text-xs font-semibold leading-5 text-slate-500">{item.example}</p>}
+                  {item.example && <p className="mt-2 max-h-24 overflow-y-auto whitespace-pre-line bg-slate-50 p-2 text-xs font-semibold leading-5 text-slate-500">{item.example}</p>}
                   {item.note && item.note !== 'Nhập từ ảnh' && <p className="mt-2 text-xs font-bold text-amber-600"><i className="fa-solid fa-note-sticky mr-1" />{item.note}</p>}
                   <div className="mt-3 grid grid-cols-3 gap-1 border-t border-slate-100 pt-3 text-center">
                     <div className="rounded-lg bg-slate-50 px-2 py-2"><p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Đã ôn</p><p className="mt-1 text-sm font-black text-slate-800">{item.reviewCount || 0} lần</p></div>
