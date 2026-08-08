@@ -596,7 +596,8 @@ const App: React.FC = () => {
                     <i className="fa-solid fa-chart-line text-2xl text-cyan-300" />
                   </div>
                   {aiUsage ? (
-                    <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                    <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-xl bg-cyan-300 p-4 text-slate-950"><p className="text-xs font-bold text-slate-700">Credit còn lại</p><p className="mt-1 text-2xl font-black">${aiUsage.creditBalanceUsd.toFixed(2)}</p></div>
                       <div className="rounded-xl bg-white/10 p-4"><p className="text-xs font-bold text-slate-300">Chi hôm nay</p><p className="mt-1 text-2xl font-black">${aiUsage.todayCostUsd.toFixed(4)}</p></div>
                       <div className="rounded-xl bg-white/10 p-4"><p className="text-xs font-bold text-slate-300">Chi tháng này</p><p className="mt-1 text-2xl font-black">${aiUsage.monthCostUsd.toFixed(4)}</p></div>
                       <div className="rounded-xl bg-white/10 p-4"><p className="text-xs font-bold text-slate-300">Lượt gọi hôm nay</p><p className="mt-1 text-2xl font-black">{aiUsage.todayRequests}</p></div>

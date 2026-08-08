@@ -86,7 +86,8 @@ Deno.serve(async (request) => {
       const { data: events } = await supabase.from('ai_usage_events').select('action,input_tokens,output_tokens').eq('owner_id', user.id).gte('created_at', monthStart.toISOString());
       const actionUsage = (events || []).reduce((groups: Record<string, number>, event: any) => ({ ...groups, [event.action]: (groups[event.action] || 0) + Number(event.input_tokens || 0) + Number(event.output_tokens || 0) * 4 }), {});
       const topAction = Object.entries(actionUsage).sort((a, b) => b[1] - a[1])[0];
-      return json({ ok: true, todayCostUsd: sumCosts(todayCosts), monthCostUsd: sumCosts(monthCosts), todayRequests: sumRequests(todayUsage), topAction: topAction ? { action: topAction[0], estimatedTokenWeight: topAction[1] } : null });
+      const creditBalanceUsd = Number(Deno.env.get('OPENAI_CREDIT_BALANCE_USD') || 0);
+      return json({ ok: true, todayCostUsd: sumCosts(todayCosts), monthCostUsd: sumCosts(monthCosts), todayRequests: sumRequests(todayUsage), creditBalanceUsd, topAction: topAction ? { action: topAction[0], estimatedTokenWeight: topAction[1] } : null });
     }
 
     const apiKey = Deno.env.get('OPENAI_API_KEY');

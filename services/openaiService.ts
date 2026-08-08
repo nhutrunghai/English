@@ -98,6 +98,7 @@ export interface OpenAiUsageSummary {
   todayCostUsd: number;
   monthCostUsd: number;
   todayRequests: number;
+  creditBalanceUsd: number;
   topAction: { action: string; estimatedTokenWeight: number } | null;
 }
 
@@ -107,6 +108,7 @@ export const fetchOpenAiUsageSummary = async (): Promise<OpenAiUsageSummary> => 
     todayCostUsd: Number(data.todayCostUsd || 0),
     monthCostUsd: Number(data.monthCostUsd || 0),
     todayRequests: Number(data.todayRequests || 0),
+    creditBalanceUsd: Number(data.creditBalanceUsd || 0),
     topAction: data.topAction?.action ? { action: String(data.topAction.action), estimatedTokenWeight: Number(data.topAction.estimatedTokenWeight || 0) } : null,
   };
 };
