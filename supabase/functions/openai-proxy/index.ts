@@ -33,6 +33,17 @@ First identify the PDF type from its content and headings.
 const imageExerciseRegionSchema = `
 IMAGE REGION OUTPUT REQUIREMENT: Every exercise object MUST include the key "imageRegion". For a text-only exercise, set "imageRegion": null. For an exercise which needs an illustration, picture, diagram, or image to answer, set it to exactly {"x":number,"y":number,"width":number,"height":number}. Coordinates must be normalized from 0 to 1 relative to the complete uploaded image. The rectangle must tightly contain only the illustration(s) needed for that one exercise. Never omit this key for a visual exercise.`;
 
+const cleanJson = (text: string) => {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  return fenced ? fenced[1].trim() : trimmed;
+};
+
+const imageRegionPassPrompt = (exercises: string) => `You are an image-region detector. Inspect the uploaded worksheet image and the exercise array below. Return ONLY a valid JSON array. For every item, return {"index":number,"imageRegion":{"x":number,"y":number,"width":number,"height":number}|null}. x, y, width and height MUST be normalized decimal coordinates 0-1 relative to the full image. A region must tightly contain the image, diagram, or illustration needed for that exact question, not its surrounding text. Use null only when the question does not need any image. Do not skip any index.
+
+Exercises:
+${exercises}`;
+
 const outputText = (payload: any) => payload.output_text || payload.output?.flatMap((item: any) => item.content || []).map((content: any) => content.text || '').join('') || '';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
@@ -152,8 +163,54 @@ Deno.serve(async (request) => {
     if (!response.ok) return json({ ok: false, error: `OpenAI API error: ${await response.text()}` }, response.status);
     const responsePayload = await response.json();
     const usage = responsePayload.usage || {};
-    await supabase.from('ai_usage_events').insert({ owner_id: user.id, action: body.action, model, input_tokens: Number(usage.input_tokens || 0), output_tokens: Number(usage.output_tokens || 0) });
-    return json({ ok: true, outputText: outputText(responsePayload) });
+    let finalOutput = outputText(responsePayload);
+    let regionUsage = { input_tokens: 0, output_tokens: 0 };
+
+    // A dedicated visual pass is substantially more reliable than asking one response
+    // to both transcribe every exercise and calculate image coordinates.
+    if (body.action === 'extract_exercises' && body.sourceType === 'image' && typeof body.content === 'string') {
+      try {
+        const exercises = JSON.parse(cleanJson(finalOutput));
+        if (Array.isArray(exercises) && exercises.length) {
+          const regionResponse = await fetch('https://api.openai.com/v1/responses', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model,
+              temperature: 0,
+              max_output_tokens: 1800,
+              input: [{ role: 'user', content: [
+                { type: 'input_text', text: imageRegionPassPrompt(JSON.stringify(exercises.map((item: any, index: number) => ({ index, instruction: item.instruction, question: item.question })))) },
+                { type: 'input_image', image_url: body.content, detail: 'high' },
+              ] }],
+            }),
+          });
+          if (regionResponse.ok) {
+            const regionPayload = await regionResponse.json();
+            regionUsage = regionPayload.usage || regionUsage;
+            const regions = JSON.parse(cleanJson(outputText(regionPayload)));
+            if (Array.isArray(regions)) {
+              regions.forEach((region: any) => {
+                const index = Number(region?.index);
+                if (Number.isInteger(index) && exercises[index] && region?.imageRegion) exercises[index].imageRegion = region.imageRegion;
+              });
+              finalOutput = JSON.stringify(exercises);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Image region pass failed', error);
+      }
+    }
+
+    await supabase.from('ai_usage_events').insert({
+      owner_id: user.id,
+      action: body.action,
+      model,
+      input_tokens: Number(usage.input_tokens || 0) + Number(regionUsage.input_tokens || 0),
+      output_tokens: Number(usage.output_tokens || 0) + Number(regionUsage.output_tokens || 0),
+    });
+    return json({ ok: true, outputText: finalOutput });
   } catch (error) {
     return json({ ok: false, error: error instanceof Error ? error.message : 'Backend AI gặp lỗi.' }, 500);
   }

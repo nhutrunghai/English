@@ -12,10 +12,18 @@ const cleanJson = (text: string) => {
 const normalizeType = (type: string): ExerciseType => ALLOWED_TYPES.includes(type as ExerciseType) ? type as ExerciseType : 'VOCAB';
 
 const normalizeImageRegion = (value: any): ExerciseItem['imageRegion'] => {
-  const x = Number(value?.x);
-  const y = Number(value?.y);
-  const width = Number(value?.width);
-  const height = Number(value?.height);
+  const toNormalizedNumber = (raw: unknown) => {
+    const text = String(raw ?? '').trim();
+    const parsed = Number.parseFloat(text);
+    if (!Number.isFinite(parsed)) return NaN;
+    return text.endsWith('%') || parsed > 1 ? parsed / 100 : parsed;
+  };
+  const x = toNormalizedNumber(value?.x ?? value?.left ?? value?.[0]);
+  const y = toNormalizedNumber(value?.y ?? value?.top ?? value?.[1]);
+  const right = toNormalizedNumber(value?.right);
+  const bottom = toNormalizedNumber(value?.bottom);
+  const width = toNormalizedNumber(value?.width ?? (Number.isFinite(right) ? right - x : value?.[2]));
+  const height = toNormalizedNumber(value?.height ?? (Number.isFinite(bottom) ? bottom - y : value?.[3]));
   if (![x, y, width, height].every(Number.isFinite) || x < 0 || y < 0 || width <= 0 || height <= 0) return undefined;
   return {
     x: Math.min(1, x),
@@ -51,7 +59,7 @@ const toExercises = (outputText: string): ExerciseItem[] => {
     answer: String(item.answer || ''),
     options: Array.isArray(item.options) ? item.options.map(String) : [],
     imageB64: '',
-    imageRegion: normalizeImageRegion(item.imageRegion),
+    imageRegion: normalizeImageRegion(item.imageRegion ?? item.image_region ?? item.region ?? item.boundingBox),
     dateLearned: new Date().toLocaleDateString('vi-VN'),
   })).filter(item => item.question || item.answer);
 };
