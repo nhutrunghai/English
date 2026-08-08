@@ -217,6 +217,28 @@ const VocaDashboard: React.FC = () => {
     }
   };
 
+  const importVocabularyClipboard = async () => {
+    if (!navigator.clipboard?.read) {
+      setMessage('Trình duyệt chưa hỗ trợ đọc ảnh từ clipboard. Hãy lưu ảnh hoặc dùng nút Nhập từ từ ảnh.');
+      return;
+    }
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find(type => type.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          await importVocabularyImage(new File([blob], 'clipboard-vocabulary.png', { type: imageType }));
+          return;
+        }
+      }
+      setMessage('Clipboard hiện không có ảnh. Hãy copy ảnh trước rồi thử lại.');
+    } catch (error) {
+      console.error(error);
+      setMessage('Không thể đọc ảnh từ clipboard. Hãy cho phép quyền clipboard hoặc dùng nút chọn ảnh.');
+    }
+  };
+
   if (practicing) {
     return <VocaPractice words={words} onClose={() => setPracticing(false)} onReviewed={saved => setWords(prev => prev.map(item => item.id === saved.id ? saved : item))} />;
   }
@@ -233,6 +255,7 @@ const VocaDashboard: React.FC = () => {
             <div className="mt-5 flex flex-wrap gap-3">
               <button onClick={() => setPracticing(true)} disabled={words.length === 0} className="inline-flex items-center gap-2 bg-cyan-300 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"><i className="fa-solid fa-graduation-cap" />{text.practiceToday}</button>
               <button onClick={() => imageInputRef.current?.click()} disabled={imageImporting} className="inline-flex items-center gap-2 border border-white/30 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/20 disabled:opacity-50"><i className={`fa-solid ${imageImporting ? 'fa-spinner animate-spin' : 'fa-image'}`} />{imageImporting ? 'AI đang đọc ảnh...' : 'Nhập từ từ ảnh'}</button>
+              <button onClick={importVocabularyClipboard} disabled={imageImporting} className="inline-flex items-center gap-2 border border-white/30 bg-white/10 px-4 py-3 text-sm font-black text-white transition hover:bg-white/20 disabled:opacity-50"><i className="fa-solid fa-paste" />Dán ảnh</button>
             </div>
           </div>
           <div className="grid grid-cols-3 divide-x divide-slate-200 bg-slate-50 text-center">
