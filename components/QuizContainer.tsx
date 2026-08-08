@@ -50,7 +50,7 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
   }, [state.currentIndex, currentItem]);
 
   useEffect(() => {
-    if (!currentItem || currentItem.type !== 'MATCHING' || currentItem.answer.trim()) return;
+    if (!currentItem || currentItem.type !== 'MATCHING') return;
     let cancelled = false;
     setResolvingMatching(true);
     resolveMatchingPairs(currentItem).then(pairs => {
@@ -127,11 +127,12 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
   const matchingLeft = currentItem.type === 'MATCHING' ? currentItem.question.split(/\s*\|\s*/).filter(Boolean) : [];
   const matchingRight = currentItem.type === 'MATCHING' ? currentItem.options || [] : [];
   const matchingAnswer = (() => {
+    if (Object.keys(resolvedMatchingPairs).length) return resolvedMatchingPairs;
     try {
       const parsed = JSON.parse(currentItem.answer || '[]');
-      return Array.isArray(parsed) ? parsed.reduce<Record<string, string>>((pairs, pair) => ({ ...pairs, [String(pair.right)]: String(pair.left) }), {}) : resolvedMatchingPairs;
+      return Array.isArray(parsed) ? parsed.reduce<Record<string, string>>((pairs, pair) => ({ ...pairs, [String(pair.right).trim()]: String(pair.left).trim() }), {}) : {};
     } catch {
-      return resolvedMatchingPairs;
+      return {};
     }
   })();
   const hasMatchingAnswer = Object.keys(matchingAnswer).length > 0;
@@ -294,7 +295,7 @@ const QuizContainer: React.FC<QuizContainerProps> = ({ list, onExit }) => {
                 <i className="fa-solid fa-circle-xmark text-lg" />
                 <span>CHƯA ĐÚNG RỒI</span>
               </div>
-              <div className="font-bold">Đáp án đúng là: <span className="underline">{currentItem.answer}</span></div>
+              <div className="font-bold">Đáp án đúng là: <span className="underline">{currentItem.type === 'MATCHING' ? Object.entries(matchingAnswer).map(([right, left]) => `${right} → ${left}`).join(', ') : currentItem.answer}</span></div>
             </div>
           )}
         </div>
