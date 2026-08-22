@@ -12,6 +12,7 @@ import CelebrationOverlay from './components/CelebrationOverlay';
 import StreakDashboard from './components/StreakDashboard';
 import VocaDashboard from './components/VocaDashboard';
 import NoteDashboard from './components/NoteDashboard';
+import InterviewDashboard from './components/InterviewDashboard';
 import AuthGate from './components/AuthGate';
 import { extractExercisesFromImage, fetchOpenAiUsageSummary, OpenAiUsageSummary, renderPdfToImages } from './services/openaiService';
 import { createExerciseFolder, deleteExerciseFolder, deleteVocabularyList, fetchExerciseFolders, fetchExerciseProgress, fetchNotes, fetchPomodoroSessions, fetchStreakTasks, fetchVocaWords, fetchVocabulary, isSupabaseConfigured, moveVocabularyListToFolder, renameVocabularyList, saveExerciseProgress, savePomodoroSession, saveStreakTask, saveVocabularyList, supabase } from './services/supabaseService';
@@ -22,6 +23,7 @@ const getModeTitle = (mode: AppMode) => {
   if (mode === AppMode.POMODORO) return 'Pomodoro streak';
   if (mode === AppMode.VOCA) return 'Voca c\u00e1 nh\u00e2n';
   if (mode === AppMode.NOTE) return 'Note c\u00e1 nh\u00e2n';
+  if (mode === AppMode.INTERVIEW) return 'Ôn phỏng vấn';
   if (mode === AppMode.STREAK) return 'K\u1ebf ho\u1ea1ch & Streak';
   if (mode === AppMode.CROP) return 'C\u1eaft \u1ea3nh b\u00e0i t\u1eadp';
   if (mode === AppMode.EDITOR) return 'Ch\u1ec9nh s\u1eeda d\u1eef li\u1ec7u';
@@ -36,6 +38,7 @@ const persistentCategories = new Set<AppMode>([
   AppMode.HISTORY,
   AppMode.VOCA,
   AppMode.NOTE,
+  AppMode.INTERVIEW,
   AppMode.POMODORO,
   AppMode.STREAK,
 ]);
@@ -754,6 +757,7 @@ const App: React.FC = () => {
           {mode === AppMode.STREAK && <StreakDashboard activeTaskId={activeStreakTask?.id || null} pomodoroRunning={pomodoroRunning} refreshKey={streakRefreshKey} onStartTask={startStreakTaskPomodoro} onCompleteActiveTask={() => completeStreakTask()} />}
           {mode === AppMode.VOCA && <VocaDashboard />}
           {mode === AppMode.NOTE && <NoteDashboard />}
+          {mode === AppMode.INTERVIEW && <InterviewDashboard />}
           {mode === AppMode.POMODORO && <PomodoroDashboard secondsLeft={pomodoroSecondsLeft} running={pomodoroRunning} studyMinutes={studyMinutes} breakMinutes={breakMinutes} savingSession={savingPomodoro} onToggle={togglePomodoro} onReset={resetPomodoro} onUpdateSettings={updatePomodoroSettings} />}
 
           {mode === AppMode.HISTORY && (

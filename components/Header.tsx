@@ -14,6 +14,7 @@ const navItems = [
   { mode: AppMode.HISTORY, label: 'B\u1ed9 t\u1eeb', icon: 'fa-layer-group' },
   { mode: AppMode.VOCA, label: 'Voca', icon: 'fa-book-open-reader' },
   { mode: AppMode.NOTE, label: 'Note', icon: 'fa-note-sticky' },
+  { mode: AppMode.INTERVIEW, label: 'Phỏng vấn', icon: 'fa-comments' },
   { mode: AppMode.POMODORO, label: 'Pomodoro', icon: 'fa-fire' },
   { mode: AppMode.STREAK, label: 'Streak', icon: 'fa-table-list' },
 ];

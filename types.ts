@@ -78,6 +78,17 @@ export interface NoteItem {
   updatedAt: string;
 }
 
+export interface InterviewItem {
+  id: string;
+  question: string;
+  answer: string;
+  note: string;
+  tags: string[];
+  reviewed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export enum AppMode {
   HOME = 'HOME',
   CROP = 'CROP',
@@ -88,6 +99,7 @@ export enum AppMode {
   HISTORY = 'HISTORY',
   VOCA = 'VOCA',
   NOTE = 'NOTE',
+  INTERVIEW = 'INTERVIEW',
   POMODORO = 'POMODORO',
   STREAK = 'STREAK'
 }

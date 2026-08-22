@@ -1,5 +1,5 @@
 ﻿import { createClient } from '@supabase/supabase-js';
-import { ExerciseFolder, ExerciseItem, ExerciseProgress, NoteItem, PomodoroSession, VocaFolder, VocaWord } from '../types';
+import { ExerciseFolder, ExerciseItem, ExerciseProgress, InterviewItem, NoteItem, PomodoroSession, VocaFolder, VocaWord } from '../types';
 import { StreakDayNote, StreakTask } from './streakTypes';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -506,6 +506,47 @@ export const deleteNote = async (id: string): Promise<boolean> => {
     .eq('owner_id', await ownerId())
     .eq('id', id);
 
+  if (error) throw error;
+  return true;
+};
+
+const normalizeInterviewItem = (row: any): InterviewItem => ({
+  id: String(row.id || crypto.randomUUID()),
+  question: String(row.question || ''),
+  answer: String(row.answer || ''),
+  note: String(row.note || ''),
+  tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
+  reviewed: Boolean(row.reviewed),
+  createdAt: String(row.created_at || ''),
+  updatedAt: String(row.updated_at || row.created_at || ''),
+});
+
+export const fetchInterviewItems = async (): Promise<InterviewItem[]> => {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('interview_items')
+    .select('*')
+    .eq('owner_id', await ownerId())
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(normalizeInterviewItem);
+};
+
+export const saveInterviewItem = async (item: Partial<InterviewItem> & { question: string; answer: string }): Promise<InterviewItem> => {
+  if (!supabase) throw new Error('Supabase is not configured');
+  const payload = {
+    id: item.id || crypto.randomUUID(), owner_id: await ownerId(),
+    question: item.question.trim(), answer: item.answer.trim(), note: item.note || '',
+    tags: item.tags || [], reviewed: Boolean(item.reviewed), updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase.from('interview_items').upsert(payload, { onConflict: 'id' }).select('*').single();
+  if (error) throw error;
+  return normalizeInterviewItem(data);
+};
+
+export const deleteInterviewItem = async (id: string): Promise<boolean> => {
+  if (!supabase) return false;
+  const { error } = await supabase.from('interview_items').delete().eq('owner_id', await ownerId()).eq('id', id);
   if (error) throw error;
   return true;
 };
